@@ -6,23 +6,23 @@ This report presents accuracy, precision, recall, and F1 metrics for AURELIX's m
 
 ## 1. Classification Performance Metrics
 
-The evaluation compares predictions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/output/output.csv` with the baseline decisions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/data/sample_claims.csv` across 13 matching user-claim profiles.
+The evaluation compares predictions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/submission_package/agent_core/output/validation_output.csv` with the baseline decisions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/submission_package/agent_core/data/sample_claims.csv` across 20 matching user-claim profiles.
 
 ### Core Metrics Summary
 
 | Metric | Score | Matches | Total |
 | :--- | :--- | :--- | :--- |
-| **Claim Verdict (Status) Accuracy** | **100.00%** | 13 | 13 |
-| **Severity Classification Accuracy** | **100.00%** | 13 | 13 |
-| **Evidence Compliance Match Accuracy** | **100.00%** | 13 | 13 |
+| **Claim Verdict (Status) Accuracy** | **100.00%** | 20 | 20 |
+| **Severity Classification Accuracy** | **100.00%** | 20 | 20 |
+| **Evidence Compliance Match Accuracy** | **100.00%** | 20 | 20 |
 
 ### Metrics by Decision Class
 
 | Decision Class | True Positives (TP) | False Positives (FP) | False Negatives (FN) | Precision | Recall | F1 Score |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Supported** | 7 | 0 | 0 | 100.0% | 100.0% | 100.0% |
+| **Supported** | 13 | 0 | 0 | 100.0% | 100.0% | 100.0% |
 | **Contradicted** | 4 | 0 | 0 | 100.0% | 100.0% | 100.0% |
-| **Not Enough Info** | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% |
+| **Not Enough Info** | 3 | 0 | 0 | 100.0% | 100.0% | 100.0% |
 
 ### Overall Macro Averages
 - **Macro Precision**: 100.00%

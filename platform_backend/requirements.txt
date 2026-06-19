@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+python-multipart
+pydantic>=2.9.0
+pydantic-settings
+websockets
+jinja2
+redis

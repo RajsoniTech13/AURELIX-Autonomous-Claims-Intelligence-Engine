@@ -18,6 +18,10 @@ def run_batch_processing():
     print("Initializing database tables...")
     init_db()
     
+    # Index historical claims for similarity search RAG
+    from backend.app.services.vector_store import index_historical_claims
+    index_historical_claims("claims/sample_claims.csv")
+    
     # 2. Open input CSV
     claims_csv_path = settings.CLAIMS_CSV
     output_csv_path = settings.OUTPUT_CSV

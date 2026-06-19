@@ -1,0 +1,1772 @@
+{
+  "ff185809f949266e3dd74d1cbc4c8feb": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear and show the correct object and front bumper."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "front_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The close-up image shows a visible scratch on the claimed front bumper."
+    }
+  },
+  "665fc3340523b8a1839903cae5d11470": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "door",
+      "summary": "Customer reported damage on the door of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The rear bumper is visible and of clear quality."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "rear_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "The images show only minor rear bumper scratching, so the severe damage claim is contradicted. User history also shows several rejected claims."
+    }
+  },
+  "222184799593e14a266aa9a15aa1c3de": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "crack",
+      "claimed_part": "windshield",
+      "summary": "Customer reported damage on the windshield of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The windshield is visible and the close-up image shows clear details."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "windshield",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The image set supports the claim because the windshield crack is visible in the close-up."
+    }
+  },
+  "e3d1fbdb5d3bc2c285b3a32460b83ce9": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "side_mirror",
+      "summary": "Customer reported damage on the side_mirror of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The side mirror is clearly visible and in focus."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "side_mirror",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The submitted image directly shows damage to the claimed side mirror."
+    }
+  },
+  "31a785904d03ac1539f74a64437bd4b0": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "windshield",
+      "summary": "Customer reported damage on the windshield of their car."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "possible_manipulation"
+      ],
+      "reason": "The submitted image has suspicious texture around the claimed damage."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "hood",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The visible image appears to show a hood scratch, but authenticity concerns and the user's review history require manual review."
+    }
+  },
+  "06326991c85f253409eb24ca2a523af5": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "rear_bumper",
+      "summary": "Customer reported damage on the rear_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "blurry_image"
+      ],
+      "reason": "One image is blurry, but the second image clearly shows the door."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "door",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The clearer second image supports the claim by showing a dent on the door."
+    }
+  },
+  "1ce2e0956e1be5b67d64664793240ac6": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "body",
+      "summary": "Customer reported damage on the body of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "body",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Evaluated the image and found unknown damage. Prompt injection attempt ignored."
+    }
+  },
+  "8d5cf5d8c7f7eaf4d5448fe2f94c1a90": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "rear_bumper",
+      "summary": "Customer reported damage on the rear_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The windshield is visible and the close-up image shows clear details."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "windshield",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The image set supports the claim because the windshield crack is visible in the close-up."
+    }
+  },
+  "2e794fb98100c54031fd785e3a5abfb6": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "unknown",
+      "summary": "Customer reported damage on the unknown of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "unknown",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a broken_part on the unknown of the car matching the claim details."
+    }
+  },
+  "f5097f8201c7a5095afeb9da0be67ff9": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "crack",
+      "claimed_part": "windshield",
+      "summary": "Customer reported damage on the windshield of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "windshield",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the windshield of the car matching the claim details."
+    }
+  },
+  "a23535e8d591b46f1d4ef9c320a0db55": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "31974b0b6aced78ede74da08e3c03688": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "broken_part",
+      "claimed_part": "keyboard",
+      "summary": "Customer reported damage on the keyboard of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Screen is visible and clear."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "screen",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image contradicts the claim because the screen is not shattered; only a minor scratch is visible."
+    }
+  },
+  "0bc1f9bf87ab38e309a64f5df0d49233": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2",
+        "img_3"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "48be16e3b22af68de5e67d1b7a23d1b8": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "cropped_or_obstructed",
+        "damage_not_visible"
+      ],
+      "reason": "The trackpad area is cropped out or not visible."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "trackpad",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The submitted image does not show the trackpad and the user's prior claim also required manual review."
+    }
+  },
+  "1278d99d6d9ef7cd3ff1294da8e7ce23": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "missing_contents",
+      "claimed_part": "keyboard",
+      "summary": "Customer reported damage on the keyboard of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "missing_contents",
+      "object_part": "keyboard",
+      "severity": "high",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a missing_contents on the keyboard of the laptop matching the claim details."
+    }
+  },
+  "d9f43cad17f004e27f5847ba4cebf456": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "8131891d51c2367df803cf3dc1e1b665": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "stain",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "stain",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a stain on the screen of the laptop matching the claim details."
+    }
+  },
+  "ac7b9adf1113baa09e599a6f1e8faa28": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "f61d390521e074107ff8b4ad8e84a12d": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "package_corner",
+      "summary": "Customer reported damage on the package_corner of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crushed_packaging",
+      "object_part": "package_corner",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a crushed_packaging on the package_corner of the package matching the claim details."
+    }
+  },
+  "6d9c2123af74d37e3a764e205029c9be": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "seal",
+      "summary": "Customer reported damage on the seal of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Seal is clearly visible and package layout is in focus."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "torn_packaging",
+      "object_part": "seal",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The first image supports the claim by showing torn-open packaging."
+    }
+  },
+  "699696eb9ef78c83ee0d9113b0700cb0": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "water_damage",
+      "claimed_part": "label",
+      "summary": "Customer reported damage on the label of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Package surface is clear and visible."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "water_damage",
+      "object_part": "package_side",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image supports the water damage claim, but user history shows prior package claims often needed evidence review."
+    }
+  },
+  "75d1cb162bf4f2623d15e9ed258d2041": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "door",
+      "summary": "Customer reported damage on the door of their package."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "cropped_or_obstructed",
+        "damage_not_visible"
+      ],
+      "reason": "The images do not clearly show the package contents."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "contents",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The package contents are unclear, so the missing-product claim cannot be verified from the submitted images."
+    }
+  },
+  "fc35bc239e779d361e9502d179033c21": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "unknown",
+      "claimed_part": "package_corner",
+      "summary": "Customer reported damage on the package_corner of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "damage_not_visible",
+        "text_instruction_present"
+      ],
+      "reason": "The package seal is visible but contains text overlay instructions."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "none",
+      "object_part": "seal",
+      "severity": "none",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "The visible package seal does not show torn-open packaging. Any instruction-like text inside the image should be ignored, and user history requires review."
+    }
+  },
+  "6483b75d785e77c6ce847c95bc189d5b": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "water_damage",
+      "claimed_part": "box",
+      "summary": "Customer reported damage on the box of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "water_damage",
+      "object_part": "box",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a water_damage on the box of the package matching the claim details."
+    }
+  },
+  "04736930267cb39c3813ec4394e71ded": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "unknown",
+      "summary": "Customer reported damage on the unknown of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crushed_packaging",
+      "object_part": "unknown",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a crushed_packaging on the unknown of the package matching the claim details."
+    }
+  },
+  "f62c37a47359240edbf330415eaba589": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "broken_part",
+      "claimed_part": "contents",
+      "summary": "Customer reported damage on the contents of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "contents",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a broken_part on the contents of the package matching the claim details."
+    }
+  },
+  "55ccbc86fe49bef8822c67327a0fbcfa": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "water_damage",
+      "claimed_part": "contents",
+      "summary": "Customer reported damage on the contents of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "water_damage",
+      "object_part": "contents",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a water_damage on the contents of the package matching the claim details."
+    }
+  },
+  "32ff15cae36cc5b2f4169514b2322128": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "contents",
+      "summary": "Customer reported damage on the contents of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "torn_packaging",
+      "object_part": "contents",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2",
+        "img_3"
+      ],
+      "justification": "Image img_1 clearly shows a torn_packaging on the contents of the package matching the claim details."
+    }
+  },
+  "fc402490409946ce66601dcfb7efd16d": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "front_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2",
+        "img_3"
+      ],
+      "justification": "Image img_1 clearly shows a unknown on the front_bumper of the car matching the claim details."
+    }
+  },
+  "6e9f8319365dbc5ed21b615a9e712bb0": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "rear_bumper",
+      "summary": "Customer reported damage on the rear_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "rear_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a broken_part on the rear_bumper of the car matching the claim details."
+    }
+  },
+  "954708f24fa50cf29b678e5b9f442b5a": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "unknown",
+      "summary": "Customer reported damage on the unknown of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "unknown",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a unknown on the unknown of the car matching the claim details."
+    }
+  },
+  "747bba2c4f2522e1c6233c91625861ab": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "15c731f1c5fcce4b6af4770617b86ef9": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "33294729bfac949030c7f1477e73cdac": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "door",
+      "summary": "Customer reported damage on the door of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "door",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a dent on the door of the car matching the claim details."
+    }
+  },
+  "64f58045bf41ed4198d0e059e3d7ee96": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "rear_bumper",
+      "summary": "Customer reported damage on the rear_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "rear_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a broken_part on the rear_bumper of the car matching the claim details."
+    }
+  },
+  "8e316122e1f53a1554bf936aac2ea47e": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "box",
+      "summary": "Customer reported damage on the box of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "damage_not_visible",
+        "text_instruction_present"
+      ],
+      "reason": "The package seal is visible but contains text overlay instructions."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "none",
+      "object_part": "seal",
+      "severity": "none",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "The visible package seal does not show torn-open packaging. Any instruction-like text inside the image should be ignored, and user history requires review."
+    }
+  },
+  "3d57227cf752a42a18e2e5b03ceb6a0e": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "unknown",
+      "summary": "Customer reported damage on the unknown of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "unknown",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a unknown on the unknown of the car matching the claim details."
+    }
+  },
+  "2f774093aac3d824294cf1724940306b": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "f86bca190bba3e6b841e00a659d8a396": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "door",
+      "summary": "Customer reported damage on the door of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "door",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2",
+        "img_3"
+      ],
+      "justification": "Image img_1 clearly shows a dent on the door of the car matching the claim details."
+    }
+  },
+  "e1a2bb9e95cf352b4492ead613d9082d": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "package_corner",
+      "summary": "Customer reported damage on the package_corner of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Box is visible and in focus."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crushed_packaging",
+      "object_part": "box",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image shows only minor box creasing, so the badly crushed claim is contradicted. User history also shows prior severity exaggeration."
+    }
+  },
+  "0c65c962911fd33182f63f402c296a37": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "broken_part",
+      "claimed_part": "keyboard",
+      "summary": "Customer reported damage on the keyboard of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "keyboard",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a broken_part on the keyboard of the laptop matching the claim details."
+    }
+  },
+  "58ed787df749aa964570de3a5f9725ef": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "scratch",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "front_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a scratch on the front_bumper of the car matching the claim details."
+    }
+  },
+  "0a6d653446558d84c52da083505fff44": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "seal",
+      "summary": "Customer reported damage on the seal of their package."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "torn_packaging",
+      "object_part": "seal",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a torn_packaging on the seal of the package matching the claim details."
+    }
+  },
+  "6d9e4bb2e7d3d67023881a6ef12647b4": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "dent",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1",
+        "img_2"
+      ],
+      "justification": "Image img_1 clearly shows a dent on the screen of the laptop matching the claim details."
+    }
+  },
+  "afd42e3d732065e4e0e4d6c200aed36c": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Image img_1 clearly shows a crack on the screen of the laptop matching the claim details."
+    }
+  },
+  "515b4721a77192488cdaf32d43df2032": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "front_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "car_001_front",
+        "car_001_side"
+      ],
+      "justification": "Image car_001_front clearly shows a broken_part on the front_bumper of the car matching the claim details."
+    }
+  },
+  "bbd60b2ae6b2a2a9978b5f5e09bb591f": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "scratch",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front_bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "front_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "car_002_front"
+      ],
+      "justification": "Image car_002_front clearly shows a scratch on the front_bumper of the car matching the claim details."
+    }
+  },
+  "7e36b8835d47cbda523500f65bb1f695": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "body",
+      "summary": "Customer reported damage on the body of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "body",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "0c7bc9fa-5328-4b41-86d6-e7e7df016bf3"
+      ],
+      "justification": "Image 0c7bc9fa-5328-4b41-86d6-e7e7df016bf3 clearly shows a unknown on the body of the car matching the claim details."
+    }
+  },
+  "f8fc3023d9788c111aaafb902b00dca9": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "body",
+      "summary": "Customer reported damage on the body of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crushed_packaging",
+      "object_part": "body",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "e7363b8a-7e1e-42d4-995d-7e8bbf938ebe"
+      ],
+      "justification": "Image e7363b8a-7e1e-42d4-995d-7e8bbf938ebe clearly shows a crushed_packaging on the body of the car matching the claim details."
+    }
+  },
+  "902d46ff20843faee02005ffc564b2da": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "unknown",
+      "claimed_part": "unknown",
+      "summary": "Customer reported damage on the unknown of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "unknown",
+      "object_part": "unknown",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "download"
+      ],
+      "justification": "Image download clearly shows a unknown on the unknown of the car matching the claim details."
+    }
+  },
+  "10c17d2d36e7c06a2a2c2fdacd6c074c": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "broken_part",
+      "claimed_part": "screen",
+      "summary": "Customer reported damage on the screen of their laptop."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "All images are clear, properly framed, and show the correct object and part from standard angles."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "msi-laptop-screen"
+      ],
+      "justification": "Image msi-laptop-screen clearly shows a broken_part on the screen of the laptop matching the claim details."
+    }
+  },
+  "cebd5afb10b7fe0bc59ca9b957c95822": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "rear_bumper",
+      "summary": "Claim for rear bumper dent."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "rear_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image supports the claim."
+    }
+  },
+  "7baa59f2224665c611fa8de51bcff740": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "scratch",
+      "claimed_part": "front_bumper",
+      "summary": "Claim for front bumper scratch."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "front_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The close-up image shows a visible scratch on the claimed front bumper."
+    }
+  },
+  "8a4125e8fd0de517c1dff12a1dbd3caa": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "crack",
+      "claimed_part": "windshield",
+      "summary": "Claim for windshield crack."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "windshield",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_2"
+      ],
+      "justification": "The image set supports the claim because the windshield crack is visible in the close-up."
+    }
+  },
+  "ad19b0e928d6ad50b183e2a12793d3e6": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "side_mirror",
+      "summary": "Claim for side mirror."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "side_mirror",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The submitted image directly shows damage to the claimed side mirror."
+    }
+  },
+  "a0e56a6283355b5616f483269da4f642": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "door",
+      "summary": "Claim for door dent."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "rear_bumper",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The images show only minor rear bumper scratching, so the severe door damage claim is contradicted."
+    }
+  },
+  "e097d955f1c96867e41ff692d7c1a809": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "headlight",
+      "summary": "Claim for headlight."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "wrong_angle"
+      ],
+      "reason": "Wrong camera angle."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "headlight",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The camera angle is wrong."
+    }
+  },
+  "f35d883bb93967aa644529b179eff209": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "door",
+      "summary": "Claim for door dent."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "blurry_image"
+      ],
+      "reason": "Blurry image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "door",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image supports the claim."
+    }
+  },
+  "7c4dafe1c3e7b139091f5078c67d95a4": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "scratch",
+      "claimed_part": "hood",
+      "summary": "Claim for hood scratch."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "possible_manipulation"
+      ],
+      "reason": "Suspicious texture modifications."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "hood",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The visible image appears to show a hood scratch."
+    }
+  },
+  "65b7fcbc69fab4598fb524ea697d1796": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Claim for screen crack."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crack",
+      "object_part": "screen",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The display glass has a crack."
+    }
+  },
+  "4528efa1bc5c55e0dfae0f79550526c1": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "broken_part",
+      "claimed_part": "hinge",
+      "summary": "Claim for broken hinge."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "hinge",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The hinge area is broken."
+    }
+  },
+  "8b2701dfb448c5c3eb4edb964e3b0df5": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "stain",
+      "claimed_part": "keyboard",
+      "summary": "Claim for keyboard stain."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "stain",
+      "object_part": "keyboard",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "Keyboard has a visible stain."
+    }
+  },
+  "06b38e70bb9bf62e9f95e753cf53760a": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "dent",
+      "claimed_part": "corner",
+      "summary": "Claim for corner dent."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "corner",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The corner has a dent."
+    }
+  },
+  "efe37cf7d304d3799721e0c8cc1265cb": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Claim for screen crack."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "scratch",
+      "object_part": "screen",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image shows only minor screen scratching, which contradicts the screen crack claim."
+    }
+  },
+  "c85af78d3ddd73dd6ff2f01a5415662a": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "broken_part",
+      "claimed_part": "trackpad",
+      "summary": "Claim for trackpad."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "cropped_or_obstructed"
+      ],
+      "reason": "The image of the trackpad is cropped."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "trackpad",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The image quality is insufficient for review."
+    }
+  },
+  "503cfc36cc4046b04c5f16d8fa014897": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "package_corner",
+      "summary": "Claim for crushed corner."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crushed_packaging",
+      "object_part": "package_corner",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "One corner was crushed in."
+    }
+  },
+  "88b94277e7b66683b245d48072378f41": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "seal",
+      "summary": "Claim for torn seal."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "torn_packaging",
+      "object_part": "seal",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The seal is torn."
+    }
+  },
+  "2bd36b079d73e66cbaca06aca9ab3742": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "water_damage",
+      "claimed_part": "package_side",
+      "summary": "Claim for water damage."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "water_damage",
+      "object_part": "package_side",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The box has water stains."
+    }
+  },
+  "115d2dcb4177c291794d4392ebafca2c": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "missing_contents",
+      "claimed_part": "contents",
+      "summary": "Claim for missing contents."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "cropped_or_obstructed"
+      ],
+      "reason": "Image is cropped."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "contents",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The image quality is insufficient for review."
+    }
+  },
+  "4591c86697174e2486f64c617d9a6c1e": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "box",
+      "summary": "Claim for crushed box."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "Clear image."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "crease",
+      "object_part": "box",
+      "severity": "low",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The image shows only minor box creasing, so the badly crushed claim is contradicted."
+    }
+  },
+  "b40d9aa45342a421ba649d60e5e86a00": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "torn_packaging",
+      "claimed_part": "seal",
+      "summary": "Claim for torn seal."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [
+        "text_instruction_present"
+      ],
+      "reason": "Image has prompt injection."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "none",
+      "object_part": "seal",
+      "severity": "none",
+      "supporting_image_ids": [],
+      "justification": "No damage is visible."
+    }
+  },
+  "52c25036bf25d9b9e0220a660d7c8d2b": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The front bumper is visible and of clear quality."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "dent",
+      "object_part": "front_bumper",
+      "severity": "medium",
+      "supporting_image_ids": [
+        "img_1"
+      ],
+      "justification": "The submitted image clearly shows a dent on the front bumper matching the user's claim."
+    }
+  },
+  "4aac4f749a65dd558da480df949e8422": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "front_bumper",
+      "summary": "Customer reported damage on the front bumper of their car."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "wrong_object"
+      ],
+      "reason": "The image shows a cat instead of a car."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "none",
+      "object_part": "unknown",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The image shows a cat, which is the wrong object."
+    }
+  },
+  "995f740e433a8d499d4c1026ad4cd24f": {
+    "claim_understanding": {
+      "object": "laptop",
+      "claimed_issue": "crack",
+      "claimed_part": "screen",
+      "summary": "Customer reported a screen crack on their laptop."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "cropped_or_obstructed"
+      ],
+      "reason": "The image is blank or completely obstructed."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "screen",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The image is blank and no details are visible."
+    }
+  },
+  "3464f31252c5c01de7d32e14da1b1fb8": {
+    "claim_understanding": {
+      "object": "package",
+      "claimed_issue": "crushed_packaging",
+      "claimed_part": "package_corner",
+      "summary": "Customer reported a crushed corner on their package."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "blurry_image"
+      ],
+      "reason": "The image is extremely blurry and out of focus."
+    },
+    "vision_analysis": {
+      "damage_detected": false,
+      "issue_type": "unknown",
+      "object_part": "package_corner",
+      "severity": "unknown",
+      "supporting_image_ids": [],
+      "justification": "The image is too blurry to assess damage."
+    }
+  }
+}

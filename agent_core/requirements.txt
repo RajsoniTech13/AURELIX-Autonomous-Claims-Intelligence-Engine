@@ -1,0 +1,10 @@
+pydantic>=2.9.0
+langgraph
+langchain
+langchain-core
+langchain-openai
+langchain-google-genai
+google-genai
+Pillow
+python-dotenv
+numpy
