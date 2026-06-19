@@ -1,0 +1,4 @@
+claim_object,required_image_count,required_visibility,required_viewing_angle,required_evidence_type
+car,2,front_bumper;rear_bumper;windshield;side_mirror;door;hood,full_context;close_up,photo
+laptop,1,screen;keyboard;hinge;trackpad;body;corner;lid,front;close_up;side,photo
+package,1,package_corner;seal;box;package_side;contents;label,any,photo

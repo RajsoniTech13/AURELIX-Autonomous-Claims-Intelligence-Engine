@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic>=2.9.0
+langgraph
+langchain
+langchain-core
+langchain-openai
+sqlalchemy
+aiosqlite
+jinja2
+python-multipart
+pydantic-settings
+websockets

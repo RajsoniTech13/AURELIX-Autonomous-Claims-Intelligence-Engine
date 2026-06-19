@@ -1,0 +1,58 @@
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, JSON, ForeignKey, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+import datetime
+
+Base = declarative_base()
+
+class Claim(Base):
+    __tablename__ = "claims"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(50), nullable=False, index=True)
+    image_paths = Column(Text, nullable=True) # Semicolon separated
+    user_claim = Column(Text, nullable=False)
+    claim_object = Column(String(50), nullable=False)
+    
+    # Processed Results (match output.csv fields)
+    evidence_standard_met = Column(Boolean, default=False)
+    evidence_standard_met_reason = Column(Text, nullable=True)
+    risk_flags = Column(Text, nullable=True) # Semicolon separated
+    issue_type = Column(String(50), nullable=True)
+    object_part = Column(String(50), nullable=True)
+    claim_status = Column(String(50), default="under_review") # supported, contradicted, not_enough_information, under_review
+    claim_status_justification = Column(Text, nullable=True)
+    supporting_image_ids = Column(String(255), nullable=True)
+    valid_image = Column(Boolean, default=True)
+    severity = Column(String(20), default="unknown") # none, low, medium, high, unknown
+    
+    # Extra Scores
+    confidence_score = Column(Integer, default=0)
+    fraud_score = Column(Integer, default=0)
+    user_risk_score = Column(Integer, default=0)
+    
+    # Escalation
+    escalation_reason = Column(Text, nullable=True)
+    manual_verdict = Column(String(50), nullable=True) # approved, rejected (by human)
+    manual_reviewer_notes = Column(Text, nullable=True)
+    
+    # Meta
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    # Relationships
+    audit_logs = relationship("AuditLog", back_populates="claim", cascade="all, delete-orphan")
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(Integer, ForeignKey("claims.id"), nullable=False)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Agent Execution Details
+    agent_name = Column(String(50), nullable=False)
+    inputs = Column(JSON, nullable=True)
+    outputs = Column(JSON, nullable=True)
+    reasoning = Column(Text, nullable=True)
+    
+    claim = relationship("Claim", back_populates="audit_logs")

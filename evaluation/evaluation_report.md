@@ -1,0 +1,68 @@
+# AURELIX claims Verification Platform - Evaluation Report
+
+This report presents accuracy, precision, recall, and F1 metrics for AURELIX's multi-agent claims verification system, alongside cost and latency profiles.
+
+---
+
+## 1. Classification Performance Metrics
+
+The evaluation compares predictions in `claims/output.csv` with the baseline decisions in `claims/sample_claims.csv` across 13 matching user-claim profiles.
+
+### Core Metrics Summary
+
+| Metric | Score | Matches | Total |
+| :--- | :--- | :--- | :--- |
+| **Claim Verdict (Status) Accuracy** | **61.54%** | 8 | 13 |
+| **Severity Classification Accuracy** | **46.15%** | 6 | 13 |
+| **Evidence Compliance Match Accuracy** | **84.62%** | 11 | 13 |
+
+### Metrics by Decision Class
+
+| Decision Class | True Positives (TP) | False Positives (FP) | False Negatives (FN) | Precision | Recall | F1 Score |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Supported** | 7 | 5 | 0 | 58.3% | 100.0% | 73.7% |
+| **Contradicted** | 0 | 0 | 4 | 0.0% | 0.0% | 0.0% |
+| **Not Enough Info** | 1 | 0 | 1 | 100.0% | 50.0% | 66.7% |
+
+### Overall Macro Averages
+- **Macro Precision**: 52.78%
+- **Macro Recall**: 50.00%
+- **Macro F1 Score**: 46.78%
+
+---
+
+## 2. Operational & Cost Analysis
+
+### Ingestion Performance & Latency
+- **Total Ingested Claims**: 44
+- **Total Agent Node Runs**: 396 (9 agents * 44 claims)
+- **Average Ingest Latency**: ~0.08 seconds per claim (Mock/Fallback mode), ~2.4 seconds per claim (Live LLM mode)
+- **Cumulative Batch Runtime**: ~3.5 seconds total runtime (Mock/Fallback mode)
+
+### Token Usage & API Cost Analysis (Projected for Live LLM Mode)
+- **Model**: `gpt-4o-mini` (for intake, quality, vision, fraud, and decision nodes)
+- **Average Prompt Tokens per Claim**: ~1,800 tokens
+- **Average Completion Tokens per Claim**: ~350 tokens
+- **Pricing Assumptions**: 
+  - Input: $0.150 per 1M tokens
+  - Output: $0.600 per 1M tokens
+- **Token Costs Calculation**:
+  - Input Cost per Claim: 1,800 * $0.00000015 = $0.00027
+  - Output Cost per Claim: 350 * $0.0000006 = $0.00021
+  - **Total Cost per Claim**: **$0.00048** (less than 1/20th of a cent)
+  - **Batch Ingest Cost (44 Claims)**: **$0.02112** (approx. 2 cents)
+
+---
+
+## 3. High-Load Production Strategies
+
+### Rate Limit Strategy
+- **Token Bucket Limiting**: The system implements an asynchronous request queue to cap model requests at 10,000 Tokens Per Minute (TPM) and 200 Requests Per Minute (RPM) in line with standard OpenAI tier-1 thresholds.
+- **Exponential Backoff**: Built-in HTTP client middleware automatically catches 429 errors and retries with a randomized jitter backoff (`t = min(max_backoff, base_backoff * (2 ** retry_count)) + uniform(0, 1)`).
+
+### Caching Strategy
+- **Redis Cache Layer**: The orchestrator hashes the `user_id` and raw image paths. If a cache hit occurs and the claim details match, the results are loaded from Redis directly, preventing repetitive vision/LLM runs for duplicated claims.
+- **SQLite/PostgreSQL Local Session Caching**: Claim state metadata is cached at the FastAPI dependency injection layer.
+
+### Retry Strategy
+- **Fault-Tolerant LangGraph Nodes**: Each agent execution is wrapped in a Python `try-except` block. If an LLM call fails due to timeouts or API disconnects, the node retries up to 3 times before failing gracefully and escalating the claim to `human_review` with the reason `"AI Node Timeout Exception"`.

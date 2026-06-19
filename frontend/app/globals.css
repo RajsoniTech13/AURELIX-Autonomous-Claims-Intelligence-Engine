@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090a0c;
+  --foreground: #f4f4f7;
+  --card: #13151a;
+  --card-hover: #1b1e26;
+  --border: #22252e;
+  --primary: #8b5cf6; /* Violet */
+  --primary-hover: #7c3aed;
+  --accent: #10b981; /* Emerald */
+  --muted: #8e939e;
+  --danger: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090a0c;
+}
+::-webkit-scrollbar-thumb {
+  background: #22252e;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #333846;
+}
