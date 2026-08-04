@@ -1,359 +1,403 @@
+"""
+AURELIX v2 — LangGraph StateGraph orchestrator.
+
+Topology (fan-out/fan-in with conditional routing):
+
+    Image Validator
+         │
+         ├── (if invalid) → short-circuit to rejected DecisionOutput
+         │
+         ▼
+    Claim Ingestion
+         │
+         ├────────────┬────────────┬────────────┐
+         ▼            ▼            ▼            ▼
+    Vision       Policy       Similar       User Risk
+    Analysis     Verification Claims        
+         │            │            │            │
+         └────────────┴─────┬──────┴────────────┘
+                            ▼
+                      Fraud Review
+                            │
+                            ▼
+                        Decision
+                            │
+                            ▼
+                           END
+
+Design decisions:
+- Conditional edge after Image Validator: if validation fails, skip everything (feedback #2).
+- Parallel fan-out: Vision, Policy, Similar Claims, User Risk run simultaneously.
+- Branch failure handling: each parallel node is wrapped in try/except and returns a
+  BranchFailureOutput on error. Fraud/Decision prompts are told to treat "failed" branches
+  as unknown (feedback #4).
+- No node mutates another node's prior output.
+"""
 from typing import TypedDict, List, Dict, Any, Annotated
 from operator import add
-from langgraph.graph import StateGraph, END
+import traceback
 from datetime import datetime, timezone
 
-def get_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from langgraph.graph import StateGraph, END
 
-# Import agent modules
-from agent_core.agents.claim_understanding import run_claim_understanding_agent
+# Agent imports
+from agent_core.agents.image_validator import run_image_validator
+from agent_core.agents.claim_ingestion import run_claim_ingestion_agent
 from agent_core.agents.vision_analysis import run_vision_analysis_agent
-from agent_core.agents.image_quality import run_image_quality_agent
-from agent_core.agents.evidence_compliance import run_evidence_retrieval_agent
+from agent_core.agents.policy_verification import run_policy_verification_agent
 from agent_core.agents.similar_claims import run_similar_claims_agent
 from agent_core.agents.user_risk import run_user_risk_agent
-from agent_core.agents.fraud_intelligence import run_fraud_intelligence_agent
-from agent_core.agents.confidence import run_confidence_agent
+from agent_core.agents.fraud_review import run_fraud_review_agent
 from agent_core.agents.decision import run_decision_agent
-from agent_core.agents.human_review import run_human_review_agent
 
-# Define Agent State
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ─── LangGraph State ────────────────────────────────────────────────────────
+
 class ClaimsState(TypedDict):
+    # Inputs
     user_id: str
     image_paths: str
     user_claim: str
     claim_object: str
-    
-    # Decoupled inputs passed in state
     user_history: Dict[str, Any]
     evidence_rules: Dict[str, Any]
-    images: List[Any]  # PIL images passed for true vision analysis
-    
+    images: List[Any]  # PIL Image objects
+
     # Agent outputs
-    understanding: Dict[str, Any]
-    quality: Dict[str, Any]
+    image_validation: Dict[str, Any]
+    ingestion: Dict[str, Any]
     vision: Dict[str, Any]
-    compliance: Dict[str, Any]
+    policy: Dict[str, Any]
     similar_claims: Dict[str, Any]
     user_risk: Dict[str, Any]
     fraud: Dict[str, Any]
-    confidence: Dict[str, Any]
     decision: Dict[str, Any]
-    escalation: Dict[str, Any]
-    
-    # Audit trail & timeline
+
+    # Audit trail (append-only)
     audit_logs: Annotated[List[Dict[str, Any]], add]
     timeline: Annotated[List[str], add]
 
-# Define Node functions
-def node_claim_understanding(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Claim Understanding executing...")
-    t_start = get_now_iso()
-    res = run_claim_understanding_agent(
-        conversation=state["user_claim"],
-        claim_object=state["claim_object"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Claim Understanding Agent",
-        "timestamp": t_start,
-        "inputs": {"user_claim": state["user_claim"], "claim_object": state["claim_object"]},
-        "outputs": out,
-        "reasoning": f"Extracted object: {res.object}, part: {res.claimed_part}, issue: {res.claimed_issue}."
-    }
-    
-    return {
-        "understanding": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Claim Parsed"]
-    }
 
-def node_image_quality(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Image Quality executing...")
-    t_start = get_now_iso()
-    claimed_part = state["understanding"]["claimed_part"]
-    claimed_object = state["understanding"]["object"]
-    
-    res = run_image_quality_agent(
-        claimed_object=claimed_object,
-        claimed_part=claimed_part,
-        conversation=state["user_claim"],
+# ─── Node: Image Validator ──────────────────────────────────────────────────
+
+def node_image_validator(state: ClaimsState) -> Dict[str, Any]:
+    print("[Utility] Image Validator executing...")
+    t = _now()
+    res = run_image_validator(
         images=state.get("images"),
-        image_paths_str=state["image_paths"]
+        image_paths_str=state["image_paths"],
     )
     out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Image Quality Agent",
-        "timestamp": t_start,
-        "inputs": {"image_paths": state["image_paths"], "claimed_object": claimed_object, "claimed_part": claimed_part},
-        "outputs": out,
-        "reasoning": res.reason
-    }
-    
     return {
-        "quality": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Image Quality Checked"]
+        "image_validation": out,
+        "audit_logs": [{
+            "agent_name": "Image Validator",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": f"Validated {res.file_count} files. Issues: {res.issues or 'none'}",
+        }],
+        "timeline": ["✓ Images Validated"],
     }
 
-def node_vision_analysis(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Vision Analysis executing...")
-    t_start = get_now_iso()
-    claimed_part = state["understanding"]["claimed_part"]
-    claimed_object = state["understanding"]["object"]
-    
-    res = run_vision_analysis_agent(
-        claimed_object=claimed_object,
-        claimed_part=claimed_part,
-        user_claim_text=state["user_claim"],
-        images=state.get("images"),
-        image_paths_str=state["image_paths"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Vision Analysis Agent",
-        "timestamp": t_start,
-        "inputs": {"image_paths": state["image_paths"], "claimed_object": claimed_object, "claimed_part": claimed_part},
-        "outputs": out,
-        "reasoning": res.justification
-    }
-    
-    return {
-        "vision": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Vision Analysed"]
-    }
 
-def node_evidence_retrieval(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Evidence Retrieval executing...")
-    t_start = get_now_iso()
-    claimed_part = state["understanding"]["claimed_part"]
-    claimed_object = state["understanding"]["object"]
-    quality_flags = state["quality"]["quality_flags"]
-    
-    # Decoupled evidence retrieval
-    res = run_evidence_retrieval_agent(
-        claim_object=claimed_object,
-        claimed_part=claimed_part,
-        image_paths=state["image_paths"],
-        quality_flags=quality_flags,
-        evidence_rules=state.get("evidence_rules")
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Evidence Retrieval Agent",
-        "timestamp": t_start,
-        "inputs": {"claimed_object": claimed_object, "claimed_part": claimed_part, "image_paths": state["image_paths"]},
-        "outputs": out,
-        "reasoning": res.reason
-    }
-    
-    return {
-        "compliance": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Evidence Standards Checked"]
-    }
+# ─── Conditional edge: route after validation (feedback #2) ─────────────────
 
-def node_similar_claims_retrieval(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Similar Claims Retrieval executing...")
-    t_start = get_now_iso()
-    
-    res = run_similar_claims_agent(
-        user_claim=state["user_claim"],
-        claim_object=state["understanding"]["object"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Similar Claims Retrieval Agent",
-        "timestamp": t_start,
-        "inputs": {"query_text": state["user_claim"]},
-        "outputs": out,
-        "reasoning": res.reasoning_context
-    }
-    
-    return {
-        "similar_claims": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Historical Similar Claims Found"]
-    }
+def route_after_validation(state: ClaimsState) -> str:
+    """If images are invalid AND we have no path fallback, short-circuit."""
+    validation = state.get("image_validation", {})
+    if not validation.get("valid", True) and validation.get("file_count", 0) == 0:
+        return "short_circuit_decision"
+    return "claim_ingestion"
 
-def node_user_risk(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] User Risk executing...")
-    t_start = get_now_iso()
-    
-    # Decoupled user risk check
-    res = run_user_risk_agent(
-        user_id=state["user_id"],
-        user_history=state.get("user_history")
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "User Risk Agent",
-        "timestamp": t_start,
-        "inputs": {"user_id": state["user_id"]},
-        "outputs": out,
-        "reasoning": res.explanation
-    }
-    
-    return {
-        "user_risk": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ User Risk Evaluated"]
-    }
 
-def node_fraud_intelligence(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Fraud Intelligence executing...")
-    t_start = get_now_iso()
-    
-    res = run_fraud_intelligence_agent(
-        claim_text=state["user_claim"],
-        claim_understanding=state["understanding"],
-        vision_analysis=state["vision"],
-        quality_flags=state["quality"]["quality_flags"],
-        user_risk_score=state["user_risk"]["user_risk_score"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Fraud Intelligence Agent",
-        "timestamp": t_start,
-        "inputs": {"user_claim": state["user_claim"]},
-        "outputs": out,
-        "reasoning": res.explanation
-    }
-    
-    return {
-        "fraud": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Fraud Checked"]
-    }
+# ─── Node: Short-circuit Decision (bad input fast-fail) ─────────────────────
 
-def node_confidence(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Confidence score calculating...")
-    t_start = get_now_iso()
-    
-    res = run_confidence_agent(
-        image_valid=state["quality"]["image_valid"],
-        quality_flags=state["quality"]["quality_flags"],
-        evidence_standard_met=state["compliance"]["evidence_standard_met"],
-        fraud_score=state["fraud"]["fraud_score"],
-        user_risk_score=state["user_risk"]["user_risk_score"],
-        damage_detected=state["vision"]["damage_detected"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Confidence Agent",
-        "timestamp": t_start,
-        "inputs": {},
-        "outputs": out,
-        "reasoning": res.explanation
+def node_short_circuit_decision(state: ClaimsState) -> Dict[str, Any]:
+    """Skip the entire pipeline when images are fundamentally broken."""
+    print("[Decision] Short-circuit: invalid images, skipping pipeline.")
+    validation = state.get("image_validation", {})
+    issues = validation.get("issues", [])
+    out = {
+        "status": "success",
+        "summary": "Claim cannot be processed due to invalid image submission.",
+        "confidence": 95,
+        "claim_status": "not_enough_information",
+        "manual_review_required": False,
+        "escalation_reason": None,
+        "justification": f"Image validation failed before pipeline execution. Issues: {', '.join(issues)}. "
+                          f"The claimant must resubmit with valid image evidence.",
     }
-    
-    return {
-        "confidence": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Confidence Calculated"]
-    }
-
-def node_decision(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Final Decision generating...")
-    t_start = get_now_iso()
-    
-    res = run_decision_agent(
-        claim_understanding=state["understanding"],
-        vision_analysis=state["vision"],
-        quality_flags=state["quality"]["quality_flags"],
-        image_valid=state["quality"]["image_valid"],
-        evidence_standard_met=state["compliance"]["evidence_standard_met"],
-        evidence_compliance_reason=state["compliance"]["reason"],
-        fraud_score=state["fraud"]["fraud_score"],
-        user_risk_score=state["user_risk"]["user_risk_score"],
-        similar_claims_context=state["similar_claims"]["reasoning_context"]
-    )
-    out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Decision Agent",
-        "timestamp": t_start,
-        "inputs": {},
-        "outputs": out,
-        "reasoning": res.justification
-    }
-    
     return {
         "decision": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Decision Generated"]
+        "audit_logs": [{
+            "agent_name": "Decision Agent (Short-Circuit)",
+            "timestamp": _now(),
+            "outputs": out,
+            "reasoning": "Fast-failed on invalid images to avoid wasting Gemini calls.",
+        }],
+        "timeline": ["✗ Short-circuited: invalid images"],
     }
 
-def node_human_review(state: ClaimsState) -> Dict[str, Any]:
-    print("[Agent] Escalation rules checking...")
-    t_start = get_now_iso()
-    
-    res = run_human_review_agent(
-        confidence_score=state["confidence"]["confidence_score"],
-        fraud_score=state["fraud"]["fraud_score"],
-        image_valid=state["quality"]["image_valid"],
-        quality_flags=state["quality"]["quality_flags"],
-        user_risk_score=state["user_risk"]["user_risk_score"],
-        claim_status=state["decision"]["claim_status"]
+
+# ─── Node: Claim Ingestion ──────────────────────────────────────────────────
+
+def node_claim_ingestion(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 1] Claim Ingestion executing...")
+    t = _now()
+    res = run_claim_ingestion_agent(
+        conversation=state["user_claim"],
+        claim_object=state["claim_object"],
+        user_id=state["user_id"],
     )
     out = res.model_dump()
-    
-    audit = {
-        "agent_name": "Human Review Agent",
-        "timestamp": t_start,
-        "inputs": {},
-        "outputs": out,
-        "reasoning": f"Manual review required: {res.manual_review_required}. Reason: {res.escalation_reason}"
-    }
-    
     return {
-        "escalation": out,
-        "audit_logs": [audit],
-        "timeline": ["✓ Escalated to Human review"]
+        "ingestion": out,
+        "audit_logs": [{
+            "agent_name": "Claim Ingestion Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": f"Extracted: {res.object} — {res.claimed_part} — {res.claimed_issue}",
+        }],
+        "timeline": ["✓ Claim Parsed"],
     }
 
-# Build LangGraph workflow
+
+# ─── Parallel Nodes (each wrapped in try/except for branch failure, feedback #4) ─
+
+def node_vision_analysis(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 2] Vision Analysis executing...")
+    t = _now()
+    try:
+        ingestion = state.get("ingestion", {})
+        res = run_vision_analysis_agent(
+            claimed_object=ingestion.get("object", state["claim_object"]),
+            claimed_part=ingestion.get("claimed_part", "unknown"),
+            user_claim_text=state["user_claim"],
+            user_id=state["user_id"],
+            images=state.get("images"),
+            image_paths_str=state["image_paths"],
+        )
+        out = res.model_dump()
+        reasoning = res.justification
+    except Exception as e:
+        print(f"[Agent 2] Vision Analysis FAILED: {e}")
+        traceback.print_exc()
+        out = {"status": "failed", "summary": f"Vision analysis failed: {str(e)}", "error": str(e)}
+        reasoning = f"Branch failed with error: {e}"
+
+    return {
+        "vision": out,
+        "audit_logs": [{
+            "agent_name": "Vision Analysis Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": reasoning,
+        }],
+        "timeline": ["✓ Vision Analyzed" if out.get("status") != "failed" else "✗ Vision Failed"],
+    }
+
+
+def node_policy_verification(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 3] Policy Verification executing...")
+    t = _now()
+    try:
+        ingestion = state.get("ingestion", {})
+        validation = state.get("image_validation", {})
+        res = run_policy_verification_agent(
+            claim_object=ingestion.get("object", state["claim_object"]),
+            claimed_part=ingestion.get("claimed_part", "unknown"),
+            image_paths=state["image_paths"],
+            image_valid=validation.get("valid", True),
+            image_issues=validation.get("issues", []),
+            evidence_rules=state.get("evidence_rules"),
+        )
+        out = res.model_dump()
+        reasoning = res.reason
+    except Exception as e:
+        print(f"[Agent 3] Policy Verification FAILED: {e}")
+        out = {"status": "failed", "summary": f"Policy check failed: {str(e)}", "error": str(e)}
+        reasoning = f"Branch failed with error: {e}"
+
+    return {
+        "policy": out,
+        "audit_logs": [{
+            "agent_name": "Policy Verification Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": reasoning,
+        }],
+        "timeline": ["✓ Policy Verified" if out.get("status") != "failed" else "✗ Policy Check Failed"],
+    }
+
+
+def node_similar_claims(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 4] Similar Claims executing...")
+    t = _now()
+    try:
+        ingestion = state.get("ingestion", {})
+        res = run_similar_claims_agent(
+            user_claim=state["user_claim"],
+            claim_object=ingestion.get("object", state["claim_object"]),
+        )
+        out = res.model_dump()
+        reasoning = res.summary
+    except Exception as e:
+        print(f"[Agent 4] Similar Claims FAILED: {e}")
+        out = {"status": "failed", "summary": f"Similar claims retrieval failed: {str(e)}", "error": str(e)}
+        reasoning = f"Branch failed with error: {e}"
+
+    return {
+        "similar_claims": out,
+        "audit_logs": [{
+            "agent_name": "Similar Claims Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": reasoning,
+        }],
+        "timeline": ["✓ Similar Claims Found" if out.get("status") != "failed" else "✗ Similar Claims Failed"],
+    }
+
+
+def node_user_risk(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 5] User Risk executing...")
+    t = _now()
+    try:
+        res = run_user_risk_agent(
+            user_id=state["user_id"],
+            user_history=state.get("user_history"),
+        )
+        out = res.model_dump()
+        reasoning = res.summary
+    except Exception as e:
+        print(f"[Agent 5] User Risk FAILED: {e}")
+        out = {"status": "failed", "summary": f"User risk check failed: {str(e)}", "error": str(e)}
+        reasoning = f"Branch failed with error: {e}"
+
+    return {
+        "user_risk": out,
+        "audit_logs": [{
+            "agent_name": "User Risk Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": reasoning,
+        }],
+        "timeline": ["✓ User Risk Evaluated" if out.get("status") != "failed" else "✗ User Risk Failed"],
+    }
+
+
+# ─── Node: Fraud Review ─────────────────────────────────────────────────────
+
+def node_fraud_review(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 6] Fraud Review executing...")
+    t = _now()
+    res = run_fraud_review_agent(
+        claim_text=state["user_claim"],
+        ingestion=state.get("ingestion", {}),
+        vision=state.get("vision", {}),
+        policy=state.get("policy", {}),
+        user_risk=state.get("user_risk", {}),
+        user_id=state["user_id"],
+    )
+    out = res.model_dump()
+    return {
+        "fraud": out,
+        "audit_logs": [{
+            "agent_name": "Fraud Review Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": res.reasoning,
+        }],
+        "timeline": ["✓ Fraud Reviewed"],
+    }
+
+
+# ─── Node: Decision ─────────────────────────────────────────────────────────
+
+def node_decision(state: ClaimsState) -> Dict[str, Any]:
+    print("[Agent 7] Decision executing...")
+    t = _now()
+    res = run_decision_agent(
+        ingestion=state.get("ingestion", {}),
+        vision=state.get("vision", {}),
+        policy=state.get("policy", {}),
+        similar_claims=state.get("similar_claims", {}),
+        user_risk=state.get("user_risk", {}),
+        fraud=state.get("fraud", {}),
+        user_id=state["user_id"],
+        claim_text=state["user_claim"],
+    )
+    out = res.model_dump()
+    return {
+        "decision": out,
+        "audit_logs": [{
+            "agent_name": "Decision Agent",
+            "timestamp": t,
+            "outputs": out,
+            "reasoning": res.justification,
+        }],
+        "timeline": ["✓ Decision Generated"],
+    }
+
+
+# ─── Build the Graph ────────────────────────────────────────────────────────
+
 def build_graph():
     workflow = StateGraph(ClaimsState)
-    
-    # Add Nodes
-    workflow.add_node("claim_understanding", node_claim_understanding)
-    workflow.add_node("image_quality", node_image_quality)
+
+    # Add all nodes
+    workflow.add_node("image_validator", node_image_validator)
+    workflow.add_node("short_circuit_decision", node_short_circuit_decision)
+    workflow.add_node("claim_ingestion", node_claim_ingestion)
     workflow.add_node("vision_analysis", node_vision_analysis)
-    workflow.add_node("evidence_retrieval", node_evidence_retrieval)
-    workflow.add_node("similar_claims_retrieval", node_similar_claims_retrieval)
+    workflow.add_node("policy_verification", node_policy_verification)
+    workflow.add_node("similar_claims", node_similar_claims)
     workflow.add_node("user_risk", node_user_risk)
-    workflow.add_node("fraud_intelligence", node_fraud_intelligence)
-    workflow.add_node("confidence", node_confidence)
+    workflow.add_node("fraud_review", node_fraud_review)
     workflow.add_node("decision", node_decision)
-    workflow.add_node("human_review", node_human_review)
-    
-    # Define Entry and Edges
-    workflow.set_entry_point("claim_understanding")
-    workflow.add_edge("claim_understanding", "image_quality")
-    workflow.add_edge("image_quality", "vision_analysis")
-    workflow.add_edge("vision_analysis", "evidence_retrieval")
-    workflow.add_edge("evidence_retrieval", "similar_claims_retrieval")
-    workflow.add_edge("similar_claims_retrieval", "user_risk")
-    workflow.add_edge("user_risk", "fraud_intelligence")
-    workflow.add_edge("fraud_intelligence", "confidence")
-    workflow.add_edge("confidence", "decision")
-    workflow.add_edge("decision", "human_review")
-    workflow.add_edge("human_review", END)
-    
+
+    # Entry point
+    workflow.set_entry_point("image_validator")
+
+    # Conditional routing after validation (feedback #2: fail fast on bad input)
+    workflow.add_conditional_edges(
+        "image_validator",
+        route_after_validation,
+        {
+            "short_circuit_decision": "short_circuit_decision",
+            "claim_ingestion": "claim_ingestion",
+        },
+    )
+    workflow.add_edge("short_circuit_decision", END)
+
+    # After ingestion: fan-out to 4 parallel branches
+    workflow.add_edge("claim_ingestion", "vision_analysis")
+    workflow.add_edge("claim_ingestion", "policy_verification")
+    workflow.add_edge("claim_ingestion", "similar_claims")
+    workflow.add_edge("claim_ingestion", "user_risk")
+
+    # All 4 branches join into fraud review
+    workflow.add_edge("vision_analysis", "fraud_review")
+    workflow.add_edge("policy_verification", "fraud_review")
+    workflow.add_edge("similar_claims", "fraud_review")
+    workflow.add_edge("user_risk", "fraud_review")
+
+    # Fraud → Decision → END
+    workflow.add_edge("fraud_review", "decision")
+    workflow.add_edge("decision", END)
+
     return workflow.compile()
 
+
+# ─── Compiled graph singleton ────────────────────────────────────────────────
+
 compiled_graph = build_graph()
+
+
+# ─── Public API ──────────────────────────────────────────────────────────────
 
 def process_claim(
     user_id: str,
@@ -365,11 +409,12 @@ def process_claim(
     images: list | None = None,
 ) -> dict:
     """
-    Public API interface to run claims analysis graph.
+    Public API to run the full 7-agent claims analysis graph.
+    Returns the final ClaimsState dict.
     """
     if isinstance(image_paths, list):
         image_paths = ";".join(image_paths)
-        
+
     initial_state = {
         "user_id": user_id,
         "image_paths": image_paths,
@@ -378,26 +423,24 @@ def process_claim(
         "user_history": user_history or {},
         "evidence_rules": evidence_rules or {},
         "images": images or [],
-        "understanding": {},
-        "quality": {},
+        # Agent output slots (initialized empty)
+        "image_validation": {},
+        "ingestion": {},
         "vision": {},
-        "compliance": {},
+        "policy": {},
         "similar_claims": {},
         "user_risk": {},
         "fraud": {},
-        "confidence": {},
         "decision": {},
-        "escalation": {},
         "audit_logs": [],
-        "timeline": []
+        "timeline": [],
     }
-    
+
     return compiled_graph.invoke(initial_state)
 
+
 def run_claims_orchestrator(claim_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Backward-compatible entrypoint.
-    """
+    """Backward-compatible entrypoint."""
     return process_claim(
         user_id=claim_data["user_id"],
         image_paths=claim_data["image_paths"],
@@ -405,5 +448,5 @@ def run_claims_orchestrator(claim_data: Dict[str, Any]) -> Dict[str, Any]:
         claim_object=claim_data["claim_object"],
         user_history=claim_data.get("user_history"),
         evidence_rules=claim_data.get("evidence_rules"),
-        images=claim_data.get("images")
+        images=claim_data.get("images"),
     )

@@ -12,30 +12,39 @@ class Claim(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(50), nullable=False, index=True)
-    image_paths = Column(Text, nullable=True) # Semicolon separated
+    image_paths = Column(Text, nullable=True)  # Semicolon separated
     user_claim = Column(Text, nullable=False)
     claim_object = Column(String(50), nullable=False)
     
-    # Processed Results (match output.csv fields)
-    evidence_standard_met = Column(Boolean, default=False)
-    evidence_standard_met_reason = Column(Text, nullable=True)
-    risk_flags = Column(Text, nullable=True) # Semicolon separated
+    # Policy Verification
+    policy_status = Column(String(20), default="PASS")  # PASS, WARNING, FAIL
+    policy_reason = Column(Text, nullable=True)
+    
+    # Vision Analysis
     issue_type = Column(String(50), nullable=True)
-    object_part = Column(String(50), nullable=True)
-    claim_status = Column(String(50), default="under_review") # supported, contradicted, not_enough_information, under_review
-    claim_status_justification = Column(Text, nullable=True)
+    object_part = Column(String(100), nullable=True)
+    severity = Column(String(20), default="unknown")  # none, minor, moderate, severe
+    impact_direction = Column(String(20), nullable=True)  # front, rear, left, right, top, unknown
+    drivable_status = Column(Boolean, default=True)
     supporting_image_ids = Column(String(255), nullable=True)
-    valid_image = Column(Boolean, default=True)
-    severity = Column(String(20), default="unknown") # none, low, medium, high, unknown
     
-    # Extra Scores
+    # Decision (absorbs Confidence + Human Review)
+    claim_status = Column(String(50), default="under_review")  # supported, contradicted, not_enough_information
+    claim_status_justification = Column(Text, nullable=True)
     confidence_score = Column(Integer, default=0)
-    fraud_score = Column(Integer, default=0)
-    user_risk_score = Column(Integer, default=0)
-    
-    # Escalation
+    manual_review_required = Column(Boolean, default=False)
     escalation_reason = Column(Text, nullable=True)
-    manual_verdict = Column(String(50), nullable=True) # approved, rejected (by human)
+    
+    # Fraud
+    fraud_score = Column(Integer, default=0)
+    
+    # User Risk
+    user_risk_score = Column(Integer, default=0)
+    risk_level = Column(String(10), nullable=True)  # LOW, MEDIUM, HIGH
+    risk_flags = Column(Text, nullable=True)  # Semicolon separated
+    
+    # Manual Review Override
+    manual_verdict = Column(String(50), nullable=True)  # approved, rejected (by human)
     manual_reviewer_notes = Column(Text, nullable=True)
     
     # Meta
@@ -53,7 +62,7 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=get_utc_now)
     
     # Agent Execution Details
-    agent_name = Column(String(50), nullable=False)
+    agent_name = Column(String(100), nullable=False)
     inputs = Column(JSON, nullable=True)
     outputs = Column(JSON, nullable=True)
     reasoning = Column(Text, nullable=True)

@@ -4,16 +4,16 @@ AURELIX is a production-grade, multi-agent AI claims intelligence engine designe
 
 The architecture is split into a **3-tier modular system** to serve two environments from a single, unified AI reasoning codebase:
 1. **HackerRank Orchestrate CLI Mode**: Standalone Python package for batch evaluation without web or DB overhead.
-2. **Production SaaS Platform Mode**: High-performance FastAPI backend gateway connected to a Next.js 15 dashboard, PostgreSQL/SQLite, Redis caching, and human-in-the-loop queues.
+2. **Production SaaS Platform Mode**: High-performance FastAPI backend gateway connected to a Next.js dashboard, PostgreSQL/SQLite, Redis caching, and human-in-the-loop queues.
 
 ---
 
 ## 🛠️ Technology Stack
 
-* **AI Engine**: LangGraph, Gemini 2.5 Flash, Gemini Vision, LangChain
+* **AI Engine**: LangGraph, Gemini 2.5 Flash (via `google-genai` SDK)
 * **API Gateway**: FastAPI (Python), SQLAlchemy, SQLite / PostgreSQL
 * **Caching**: Redis
-* **Frontend**: Next.js 15, TypeScript, Tailwind CSS, Shadcn UI
+* **Frontend**: Next.js (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
 * **Retrieval (RAG)**: Cosine Similarity TF-IDF search index
 
 ---
@@ -23,7 +23,7 @@ The architecture is split into a **3-tier modular system** to serve two environm
 ```
 aurelix/
 ├── agent_core/             # Main AI reasoning engine package (shared by SaaS & CLI)
-│   ├── agents/             # 9 specialized AI agents
+│   ├── agents/             # 7 specialized AI agents
 │   ├── orchestrator/       # LangGraph graph topology & process_claim API
 │   ├── prompts/            # Centralized prompt templates
 │   ├── schemas/            # Pydantic serialization models
@@ -31,14 +31,6 @@ aurelix/
 │   ├── evaluation/         # System metrics calculation scripts
 │   ├── data/               # Local database (claims, rules, ground truth)
 │   └── main.py             # CLI runner: CSV -> process_claim() -> output.csv
-│
-├── submission_package/     # Standalone HackerRank submission package
-│   ├── README.md           # Standalone setup and CLI instructions
-│   ├── INTERVIEW_PREP.md   # Judge Q&A reference document
-│   ├── test_submission_verdict.py # Automated verdict validation script
-│   ├── log.txt             # Complete development chat prompt log
-│   ├── test_images/        # Test images for verdict verification
-│   └── agent_core/         # Standalone snapshot of the claims engine
 │
 ├── platform_backend/       # FastAPI gateway web server (imports from agent_core)
 │   ├── api/routes.py       # API routes forwarding requests to agent_core
@@ -52,14 +44,13 @@ aurelix/
 
 ---
 
-## 🚀 Running the Platform
+## 🚀 Running the Platform Locally
 
 ### Option A: HackerRank CLI Mode (Standalone AI Engine)
 
-To run the batch parser on the `data/claims.csv` dataset and run classification evaluation metrics:
-
 1. **Activate Environment & Install requirements**:
    ```bash
+   python -m venv venv
    source venv/bin/activate
    pip install -r agent_core/requirements.txt
    ```
@@ -72,17 +63,14 @@ To run the batch parser on the `data/claims.csv` dataset and run classification 
    ```bash
    python agent_core/main.py
    ```
-   * Verdicts are saved to: `agent_core/output/output.csv`
-   * Classification reports are saved to: `agent_core/output/evaluation_report.md` (expect **100% Match Accuracy** on baseline cases).
-
----
 
 ### Option B: Production SaaS Mode (Web App)
 
-To run the complete SaaS stack with the dashboard, analytics, and database tracking:
-
-1. **Configure Environment Variables**:
-   Ensure `.env` in the root workspace contains your DB and API keys.
+1. **Install Dependencies**:
+   ```bash
+   pip install -r agent_core/requirements.txt -r platform_backend/requirements.txt
+   cd frontend && npm install
+   ```
 2. **Start FastAPI Gateway**:
    ```bash
    ./venv/bin/python -m uvicorn platform_backend.main:app --host 127.0.0.1 --port 8000
@@ -92,20 +80,52 @@ To run the complete SaaS stack with the dashboard, analytics, and database track
    cd frontend
    npm run dev
    ```
-4. **Access UI**:
-   Open [http://localhost:3000](http://localhost:3000) to submit claims, view real-time agent execution visualizers, manage human review overrides, and inspect analytics.
+4. **Access UI**: Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
 ## 🤖 Coordinated AI Claims Pipeline
 
-Each claim undergoes a 9-stage validation:
-1. **Intake / Intent Agent**: Extracts objects, parts, and issues.
-2. **Quality Check Agent**: Identifies blur, darkness, wrong angles, or obstructions.
-3. **Gemini Vision Agent**: Verifies if the damage matches the claim.
-4. **Evidence compliance SLA Agent**: Matches image counts and visibility checklists against policy guidebooks.
-5. **RAG Retriever Agent**: Retrieves similar cases from the vector index for context.
-6. **User History Agent**: Determines historic rejections and claim velocity.
-7. **Fraud Intel Agent**: Flags visual/claim mismatches or suspicious behaviors.
-8. **Confidence Aggregator**: Computes a confidence rating (0-100).
-9. **Final Decision Engine**: Assigns verdicts (`supported`, `contradicted`, `not_enough_information`) with explainable AI logs.
+Each claim undergoes a parallel 7-agent validation graph orchestrated by LangGraph:
+1. **Image Validator**: Fast fail-safe to check image integrity and metadata before LLM inference.
+2. **Claim Ingestion Agent**: Parses unstructured user descriptions into structured JSON.
+3. **Vision Analysis Agent**: Multimodal Gemini reasoning over submitted images to detect physical damage severity.
+4. **Policy Verification Agent**: Validates evidence against the SLA guidebook.
+5. **Similar Claims Agent**: TF-IDF similarity search to fetch historical repair estimates.
+6. **User Risk Agent**: Checks claimant history for fraud flags and velocity limits.
+7. **Fraud Review & Decision Agents**: Aggregates all branch signals to compute a final confidence score, justification, and manual review escalation requirement.
+
+---
+
+## 🐳 Deployment (Docker & Render/Vercel)
+
+### 1. Backend (Render / Fly.io / AWS)
+A `Dockerfile` is provided for the FastAPI + LangGraph backend.
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY agent_core/ agent_core/
+COPY platform_backend/ platform_backend/
+RUN pip install -r agent_core/requirements.txt -r platform_backend/requirements.txt
+ENV PYTHONPATH=/app
+CMD ["uvicorn", "platform_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+To build and run locally:
+```bash
+docker build -t aurelix-backend .
+docker run -p 8000:8000 -e GEMINI_API_KEY=your_key aurelix-backend
+```
+
+### 2. Frontend (Vercel)
+The Next.js frontend is optimized for zero-config Vercel deployment.
+1. Connect your GitHub repository to Vercel.
+2. Set the Root Directory to `frontend`.
+3. Set the build command to `npm run build`.
+4. Ensure `NEXT_PUBLIC_API_URL` is set to your deployed backend URL.
+
+### 3. Database
+- By default, it uses a local SQLite database (`aurelix.db`).
+- For production, set the `DATABASE_URL` environment variable to a PostgreSQL connection string (e.g., Neon Serverless Postgres). SQLAlchemy will automatically map all models.

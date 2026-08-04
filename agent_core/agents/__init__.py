@@ -1,1 +1,1 @@
-# agent-core/agents package
+"""AURELIX v2 — Agent modules."""

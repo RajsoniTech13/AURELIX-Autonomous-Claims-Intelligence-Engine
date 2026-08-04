@@ -24,22 +24,32 @@ class AuditLogSchema(BaseModel):
 
 class ClaimSchema(ClaimBase):
     id: int
-    evidence_standard_met: bool
-    evidence_standard_met_reason: Optional[str] = None
-    risk_flags: Optional[str] = None
+    # Policy
+    policy_status: Optional[str] = None
+    policy_reason: Optional[str] = None
+    # Vision
     issue_type: Optional[str] = None
     object_part: Optional[str] = None
+    severity: str = "unknown"
+    impact_direction: Optional[str] = None
+    drivable_status: bool = True
+    supporting_image_ids: Optional[str] = None
+    # Decision
     claim_status: str
     claim_status_justification: Optional[str] = None
-    supporting_image_ids: Optional[str] = None
-    valid_image: bool
-    severity: str
-    confidence_score: int
-    fraud_score: int
-    user_risk_score: int
+    confidence_score: int = 0
+    manual_review_required: bool = False
     escalation_reason: Optional[str] = None
+    # Fraud
+    fraud_score: int = 0
+    # User Risk
+    user_risk_score: int = 0
+    risk_level: Optional[str] = None
+    risk_flags: Optional[str] = None
+    # Manual Review
     manual_verdict: Optional[str] = None
     manual_reviewer_notes: Optional[str] = None
+    # Meta
     created_at: datetime
     updated_at: datetime
     
@@ -75,11 +85,11 @@ class SeverityDistribution(BaseModel):
     count: int
 
 class ConfidenceBucket(BaseModel):
-    bucket: str # "90-100", "70-89", "<70"
+    bucket: str
     count: int
 
 class FraudBucket(BaseModel):
-    bucket: str # "0-20", "21-50", "51-80", "81-100"
+    bucket: str
     count: int
 
 class AnalyticsDashboardData(BaseModel):

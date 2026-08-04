@@ -1,1 +1,1 @@
-# agent-core/services package
+"""AURELIX v2 — Service modules."""

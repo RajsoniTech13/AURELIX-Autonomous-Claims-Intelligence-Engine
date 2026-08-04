@@ -1768,5 +1768,53 @@
       "supporting_image_ids": [],
       "justification": "The image is too blurry to assess damage."
     }
+  },
+  "7f4d3b8a8b7e64879653cc68b84acec1": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "broken_part",
+      "claimed_part": "body",
+      "summary": "The customer reported that their car is totally damaged."
+    },
+    "image_quality": {
+      "image_valid": true,
+      "quality_flags": [],
+      "reason": "The image is clear, well-lit, and properly focused, showing severe front and side body damage to the claimed car matching the claim description. No quality issues or signs of manipulation are present."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "body",
+      "severity": "high",
+      "supporting_image_ids": [
+        "img_0"
+      ],
+      "justification": "The vehicle exhibits severe structural and cosmetic damage across its front and side body panels. The front bumper, hood, headlight assembly, and grille are heavily crushed and broken. Additionally, the passenger side doors and side pillar are severely crumpled with exposed internal components, confirming extensive total damage to the car's body."
+    }
+  },
+  "7337060e2f8c2e7b8e69378017a1c05c": {
+    "claim_understanding": {
+      "object": "car",
+      "claimed_issue": "dent",
+      "claimed_part": "front_bumper",
+      "summary": "The customer's car sustained severe damage to the front and left side during an intersection collision. The vehicle was towed from the scene, and the policyholder is requesting a repair cost assessment and claim approval."
+    },
+    "image_quality": {
+      "image_valid": false,
+      "quality_flags": [
+        "possible_manipulation"
+      ],
+      "reason": "The submitted image contains a visual search (Google Lens) icon in the bottom-left corner, indicating that it is a screenshot or image downloaded from the internet rather than an authentic original photograph taken at the scene. Therefore, it fails authenticity and manipulation checks."
+    },
+    "vision_analysis": {
+      "damage_detected": true,
+      "issue_type": "broken_part",
+      "object_part": "front_bumper",
+      "severity": "high",
+      "supporting_image_ids": [
+        "0"
+      ],
+      "justification": "Image [0] displays extensive visual evidence of severe structural and body damage to the vehicle. The front bumper is cracked, crushed, and partially detached, with the front grille destroyed and the right headlight assembly completely shattered. Additionally, the hood is heavily crumpled, and the side doors and fender exhibit severe denting and crushing, fully consistent with a major collision."
+    }
   }
 }
