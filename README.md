@@ -86,8 +86,18 @@ aurelix/
 
 ## 🤖 Coordinated AI Claims Pipeline
 
-Each claim undergoes a parallel 7-agent validation graph orchestrated by LangGraph:
-1. **Image Validator**: Fast fail-safe to check image integrity and metadata before LLM inference.
+Each claim runs through a LangGraph `StateGraph` of **9 nodes** — 7 agents, plus a non-LLM
+image pre-flight and a short-circuit path for claims with no usable evidence. Four agents
+call Gemini; three are deterministic Python.
+
+> **Note on concurrency:** the graph is written as a fan-out, but a synchronous
+> `.invoke()` executes each superstep's nodes sequentially, so the four middle branches do
+> not currently overlap. Measured node latencies sum to the measured end-to-end time.
+> Making the fan-out genuinely concurrent is Phase 2 work — see `docs/AUDIT.md` §2.3.
+
+1. **Image Validator** *(deterministic)*: Verifies images exist, decode, and meet minimum
+   resolution before any LLM call. A claim with no usable image short-circuits straight to
+   `not_enough_information` — this is the single largest cost saving in the pipeline.
 2. **Claim Ingestion Agent**: Parses unstructured user descriptions into structured JSON.
 3. **Vision Analysis Agent**: Multimodal Gemini reasoning over submitted images to detect physical damage severity.
 4. **Policy Verification Agent**: Validates evidence against the SLA guidebook.
@@ -100,10 +110,13 @@ Each claim undergoes a parallel 7-agent validation graph orchestrated by LangGra
 ## 🐳 Deployment (Docker & Render/Vercel)
 
 ### 1. Backend (Render / Fly.io / AWS)
-A `Dockerfile` is provided for the FastAPI + LangGraph backend.
+
+> **Not yet implemented.** There is no `Dockerfile` in this repository and no
+> `docker-compose.yml`; the commands below will not run today. Containerisation is Phase 5
+> work. The snippet is retained as the intended starting point.
 
 ```dockerfile
-# Dockerfile
+# Dockerfile — PROPOSED, not present in the repo
 FROM python:3.11-slim
 WORKDIR /app
 COPY agent_core/ agent_core/

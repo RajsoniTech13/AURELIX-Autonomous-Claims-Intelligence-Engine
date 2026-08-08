@@ -49,9 +49,10 @@ Install core dependencies in your virtual environment:
 pip install -r requirements.txt
 ```
 
-Set up your Gemini API key (or OpenAI key) in `.env` inside the project root:
-```env
-GEMINI_API_KEY=AQ.Ab8RN...   # Or use OPENAI_API_KEY
+Copy the template and add your own Gemini API key. Never commit `.env` — it is gitignored.
+```bash
+cp .env.example .env
+# then edit .env and set GEMINI_API_KEY
 ```
 
 ---
