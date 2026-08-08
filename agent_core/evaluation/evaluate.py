@@ -1,192 +1,248 @@
+"""
+AURELIX — evaluation harness.
+
+Every number this module writes is computed from the two CSVs it is given. Nothing is
+asserted that was not measured.
+
+That is a change in kind from the previous version, whose "Operational & Cost Analysis"
+and "High-Load Production Strategies" sections were hardcoded string literals. The report
+on disk claimed a model the project does not use (`gpt-4o-mini`), a per-claim latency an
+order of magnitude below the measured value, a token-bucket rate limiter that did not
+exist, and a retry-and-escalate path that could not execute. For an insurance product
+those are audit-trail claims, so they are gone rather than corrected: if we do not measure
+it here, this file does not say it.
+"""
+from __future__ import annotations
+
 import csv
 import os
-import time
+from collections import Counter
+from typing import Any, Dict, List, Tuple
 
-def evaluate_predictions(sample_path=None, output_path=None, report_path=None):
-    print("--- Running AURELIX Claims Evaluator ---")
-    
-    if not sample_path:
-        sample_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/sample_claims.csv"))
-    if not output_path:
-        output_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../output/output.csv"))
-    if not report_path:
-        report_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../output/evaluation_report.md"))
-        
-    # Create evaluation directory if not exists
-    os.makedirs(os.path.dirname(report_path), exist_ok=True)
-    
+CLASSES = ("supported", "contradicted", "not_enough_information")
+
+
+def _join_key(row: Dict[str, str]) -> Tuple[str, str]:
+    """
+    Join on (user_id, image_paths).
+
+    The previous key was `user_id + claim_object`, which is not unique — the same user
+    files multiple car claims — so rows silently overwrote each other before scoring.
+    """
+    return row.get("user_id", ""), row.get("image_paths", "")
+
+
+def _load(path: str) -> Tuple[Dict[Tuple[str, str], Dict[str, str]], int, int]:
+    """Return (indexed rows, total rows read, duplicate-key count)."""
+    with open(path, mode="r", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    indexed: Dict[Tuple[str, str], Dict[str, str]] = {}
+    duplicates = 0
+    for row in rows:
+        key = _join_key(row)
+        if key in indexed:
+            duplicates += 1
+        indexed[key] = row
+    return indexed, len(rows), duplicates
+
+
+def _norm(row: Dict[str, str], field: str) -> str:
+    return (row.get(field) or "").strip().lower()
+
+
+def evaluate_predictions(
+    sample_path: str | None = None,
+    output_path: str | None = None,
+    report_path: str | None = None,
+) -> Dict[str, Any]:
+    """Score predictions against labelled ground truth. Returns the metrics dict."""
+    here = os.path.dirname(__file__)
+    sample_path = sample_path or os.path.abspath(os.path.join(here, "../data/sample_claims.csv"))
+    output_path = output_path or os.path.abspath(os.path.join(here, "../output/output.csv"))
+    report_path = report_path or os.path.abspath(os.path.join(here, "../output/evaluation_report.md"))
+
+    print("--- AURELIX evaluation ---")
     if not os.path.exists(sample_path) or not os.path.exists(output_path):
-        print(f"Missing sample or output CSV files. Sample: {sample_path}, Output: {output_path}. Cannot run evaluation.")
-        return
-        
-    print(f"Comparing {output_path} against ground truth {sample_path}...")
-        
-    # Read sample claims (ground truth)
-    ground_truth = {}
-    with open(sample_path, mode="r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            user_id = row.get("user_id")
-            claim_object = row.get("claim_object")
-            key = f"{user_id}_{claim_object}"
-            ground_truth[key] = {
-                "status": row.get("claim_status", "").strip().lower(),
-                "severity": row.get("severity", "").strip().lower(),
-                "evidence_standard_met": row.get("evidence_standard_met", "").strip().lower()
-            }
-            
-    # Read predictions (our model outputs)
-    predictions = {}
-    with open(output_path, mode="r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            user_id = row.get("user_id")
-            claim_object = row.get("claim_object")
-            key = f"{user_id}_{claim_object}"
-            predictions[key] = {
-                "status": row.get("claim_status", "").strip().lower(),
-                "severity": row.get("severity", "").strip().lower(),
-                "evidence_standard_met": row.get("evidence_standard_met", "").strip().lower()
-            }
-            
-    # Compute metrics
-    total_matched = 0
-    correct_status = 0
-    correct_severity = 0
-    correct_compliance = 0
-    
-    # Confusion matrix for 'supported', 'contradicted', 'not_enough_information'
-    classes = ["supported", "contradicted", "not_enough_information"]
-    conf_matrix = {c: {pred: 0 for pred in classes} for c in classes}
-    
-    for key, gt_row in ground_truth.items():
-        if key in predictions:
-            total_matched += 1
-            pred_row = predictions[key]
-            
-            # Status accuracy
-            gt_status = gt_row["status"]
-            pred_status = pred_row["status"]
-            
-            if pred_status not in conf_matrix:
-                pred_status = "not_enough_information"
-            if gt_status not in conf_matrix:
-                gt_status = "not_enough_information"
-                
-            conf_matrix[gt_status][pred_status] += 1
-            
-            if gt_status == pred_status:
-                correct_status += 1
-                
-            if gt_row["severity"] == pred_row["severity"]:
-                correct_severity += 1
-                
-            if gt_row["evidence_standard_met"] == pred_row["evidence_standard_met"]:
-                correct_compliance += 1
-                
-    # Calculate Precision, Recall, F1 for each class
-    metrics_by_class = {}
-    for c in classes:
-        tp = conf_matrix[c][c]
-        fp = sum(conf_matrix[other][c] for other in classes if other != c)
-        fn = sum(conf_matrix[c][other] for other in classes if other != c)
-        
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-        
-        metrics_by_class[c] = {
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
-            "tp": tp,
-            "fp": fp,
-            "fn": fn
+        print(f"Cannot evaluate: missing {sample_path} or {output_path}")
+        return {}
+
+    truth, truth_rows, truth_dupes = _load(sample_path)
+    preds, pred_rows, pred_dupes = _load(output_path)
+
+    matched_keys = sorted(set(truth) & set(preds))
+    missing = sorted(set(truth) - set(preds))
+
+    # Coverage is reported prominently and separately from accuracy. A run that emitted
+    # one row out of twenty could otherwise report 100% and look healthy.
+    coverage = len(matched_keys) / len(truth) if truth else 0.0
+
+    confusion = {gt: Counter() for gt in CLASSES}
+    correct_status = correct_severity = correct_evidence = 0
+    mistakes: List[Dict[str, str]] = []
+
+    for key in matched_keys:
+        gt_row, pr_row = truth[key], preds[key]
+
+        gt_status = _norm(gt_row, "claim_status")
+        pr_status = _norm(pr_row, "claim_status")
+        gt_status = gt_status if gt_status in CLASSES else "not_enough_information"
+        pr_status = pr_status if pr_status in CLASSES else "not_enough_information"
+        confusion[gt_status][pr_status] += 1
+
+        if gt_status == pr_status:
+            correct_status += 1
+        else:
+            mistakes.append({
+                "user_id": gt_row.get("user_id", ""),
+                "claim_object": gt_row.get("claim_object", ""),
+                "expected": gt_status,
+                "predicted": pr_status,
+                "predicted_severity": _norm(pr_row, "severity"),
+                "expected_severity": _norm(gt_row, "severity"),
+                "justification": (pr_row.get("claim_status_justification") or "")[:160],
+            })
+
+        if _norm(gt_row, "severity") == _norm(pr_row, "severity"):
+            correct_severity += 1
+        if _norm(gt_row, "evidence_standard_met") == _norm(pr_row, "evidence_standard_met"):
+            correct_evidence += 1
+
+    n = len(matched_keys)
+    per_class: Dict[str, Dict[str, float]] = {}
+    for c in CLASSES:
+        tp = confusion[c][c]
+        fp = sum(confusion[o][c] for o in CLASSES if o != c)
+        fn = sum(confusion[c][o] for o in CLASSES if o != c)
+        support = sum(confusion[c].values())
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+        per_class[c] = {
+            "tp": tp, "fp": fp, "fn": fn, "support": support,
+            "precision": precision, "recall": recall, "f1": f1,
         }
-        
-    # Micro/Macro averages
-    macro_precision = sum(m["precision"] for m in metrics_by_class.values()) / len(classes)
-    macro_recall = sum(m["recall"] for m in metrics_by_class.values()) / len(classes)
-    macro_f1 = sum(m["f1"] for m in metrics_by_class.values()) / len(classes)
-    
-    accuracy = correct_status / total_matched if total_matched > 0 else 0
-    severity_acc = correct_severity / total_matched if total_matched > 0 else 0
-    compliance_acc = correct_compliance / total_matched if total_matched > 0 else 0
-    
-    print(f"Evaluation finished. Processed {total_matched} matches. Accuracy: {accuracy:.4f}")
-    
-    # Write report.md
-    with open(report_path, mode="w", encoding="utf-8") as f:
-        f.write(f"""# AURELIX claims Verification Platform - Evaluation Report
 
-This report presents accuracy, precision, recall, and F1 metrics for AURELIX's multi-agent claims verification system, alongside cost and latency profiles.
+    macro_f1 = sum(m["f1"] for m in per_class.values()) / len(CLASSES)
+    metrics = {
+        "n_ground_truth": len(truth),
+        "n_predictions": len(preds),
+        "n_matched": n,
+        "coverage": coverage,
+        "status_accuracy": correct_status / n if n else 0.0,
+        "severity_accuracy": correct_severity / n if n else 0.0,
+        "evidence_accuracy": correct_evidence / n if n else 0.0,
+        "macro_f1": macro_f1,
+        "per_class": per_class,
+        "confusion": {gt: dict(row) for gt, row in confusion.items()},
+        "mistakes": mistakes,
+    }
 
----
+    _write_report(report_path, metrics, sample_path, output_path,
+                  truth_rows, pred_rows, truth_dupes, pred_dupes, missing)
 
-## 1. Classification Performance Metrics
+    print(
+        f"Coverage {coverage:.0%} ({n}/{len(truth)}). "
+        f"Status accuracy {metrics['status_accuracy']:.1%}, macro-F1 {macro_f1:.1%}."
+    )
+    print(f"Report: {report_path}")
+    return metrics
 
-The evaluation compares predictions in `{output_path}` with the baseline decisions in `{sample_path}` across {total_matched} matching user-claim profiles.
 
-### Core Metrics Summary
+def _write_report(
+    path: str, m: Dict[str, Any], sample_path: str, output_path: str,
+    truth_rows: int, pred_rows: int, truth_dupes: int, pred_dupes: int,
+    missing: List[Tuple[str, str]],
+) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pc = m["per_class"]
 
-| Metric | Score | Matches | Total |
-| :--- | :--- | :--- | :--- |
-| **Claim Verdict (Status) Accuracy** | **{accuracy * 100:.2f}%** | {correct_status} | {total_matched} |
-| **Severity Classification Accuracy** | **{severity_acc * 100:.2f}%** | {correct_severity} | {total_matched} |
-| **Evidence Compliance Match Accuracy** | **{compliance_acc * 100:.2f}%** | {correct_compliance} | {total_matched} |
+    lines = [
+        "# AURELIX — Evaluation Report",
+        "",
+        "Every figure below is computed from the two files named here. Latency, token, and",
+        "cost figures are deliberately absent: this harness does not observe the pipeline",
+        "running, so it does not report on it. See `PERFORMANCE.md` for measured runtime data.",
+        "",
+        f"- Ground truth: `{os.path.relpath(sample_path)}` ({truth_rows} rows)",
+        f"- Predictions: `{os.path.relpath(output_path)}` ({pred_rows} rows)",
+        "",
+        "## Coverage",
+        "",
+        f"| Matched | Ground truth | Coverage |",
+        f"| ---: | ---: | ---: |",
+        f"| {m['n_matched']} | {m['n_ground_truth']} | **{m['coverage']:.1%}** |",
+        "",
+    ]
 
-### Metrics by Decision Class
+    if m["coverage"] < 1.0:
+        lines += [
+            f"> **{len(missing)} ground-truth claim(s) have no prediction** and are excluded from",
+            "> every accuracy figure below. Accuracy is conditional on coverage — read them together.",
+            "",
+        ]
+    if truth_dupes or pred_dupes:
+        lines += [
+            f"> Duplicate join keys collapsed: {truth_dupes} in ground truth, {pred_dupes} in predictions.",
+            "",
+        ]
 
-| Decision Class | True Positives (TP) | False Positives (FP) | False Negatives (FN) | Precision | Recall | F1 Score |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Supported** | {metrics_by_class["supported"]["tp"]} | {metrics_by_class["supported"]["fp"]} | {metrics_by_class["supported"]["fn"]} | {metrics_by_class["supported"]["precision"] * 100:.1f}% | {metrics_by_class["supported"]["recall"] * 100:.1f}% | {metrics_by_class["supported"]["f1"] * 100:.1f}% |
-| **Contradicted** | {metrics_by_class["contradicted"]["tp"]} | {metrics_by_class["contradicted"]["fp"]} | {metrics_by_class["contradicted"]["fn"]} | {metrics_by_class["contradicted"]["precision"] * 100:.1f}% | {metrics_by_class["contradicted"]["recall"] * 100:.1f}% | {metrics_by_class["contradicted"]["f1"] * 100:.1f}% |
-| **Not Enough Info** | {metrics_by_class["not_enough_information"]["tp"]} | {metrics_by_class["not_enough_information"]["fp"]} | {metrics_by_class["not_enough_information"]["fn"]} | {metrics_by_class["not_enough_information"]["precision"] * 100:.1f}% | {metrics_by_class["not_enough_information"]["recall"] * 100:.1f}% | {metrics_by_class["not_enough_information"]["f1"] * 100:.1f}% |
+    lines += [
+        "## Classification performance",
+        "",
+        "| Metric | Score | Correct | Scored |",
+        "| :--- | ---: | ---: | ---: |",
+        f"| Claim verdict accuracy | **{m['status_accuracy']:.1%}** | {round(m['status_accuracy'] * m['n_matched'])} | {m['n_matched']} |",
+        f"| Severity accuracy | {m['severity_accuracy']:.1%} | {round(m['severity_accuracy'] * m['n_matched'])} | {m['n_matched']} |",
+        f"| Evidence-standard accuracy | {m['evidence_accuracy']:.1%} | {round(m['evidence_accuracy'] * m['n_matched'])} | {m['n_matched']} |",
+        "",
+        "### Per class",
+        "",
+        "| Class | Support | TP | FP | FN | Precision | Recall | F1 |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for c in CLASSES:
+        d = pc[c]
+        lines.append(
+            f"| {c} | {d['support']} | {d['tp']} | {d['fp']} | {d['fn']} | "
+            f"{d['precision']:.1%} | {d['recall']:.1%} | {d['f1']:.1%} |"
+        )
 
-### Overall Macro Averages
-- **Macro Precision**: {macro_precision * 100:.2f}%
-- **Macro Recall**: {macro_recall * 100:.2f}%
-- **Macro F1 Score**: {macro_f1 * 100:.2f}%
+    lines += [
+        "",
+        f"**Macro F1: {m['macro_f1']:.1%}**",
+        "",
+        f"> Support is small (n={m['n_matched']}) and imbalanced. A single flipped claim moves",
+        "> per-class F1 by double digits, so treat these as directional, not precise.",
+        "",
+        "### Confusion matrix",
+        "",
+        "Rows are ground truth, columns are predictions.",
+        "",
+        "| actual \\ predicted | " + " | ".join(CLASSES) + " |",
+        "| :--- | " + " | ".join("---:" for _ in CLASSES) + " |",
+    ]
+    for gt in CLASSES:
+        row = m["confusion"][gt]
+        lines.append(f"| **{gt}** | " + " | ".join(str(row.get(p, 0)) for p in CLASSES) + " |")
 
----
+    lines += ["", "## Misclassified claims", ""]
+    if not m["mistakes"]:
+        lines.append("None among the scored claims.")
+    else:
+        lines += [
+            "| user_id | object | expected | predicted | severity (exp/pred) | justification |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        ]
+        for mistake in m["mistakes"]:
+            just = mistake["justification"].replace("|", "\\|").replace("\n", " ")
+            lines.append(
+                f"| {mistake['user_id']} | {mistake['claim_object']} | {mistake['expected']} | "
+                f"{mistake['predicted']} | {mistake['expected_severity']}/{mistake['predicted_severity']} | {just} |"
+            )
 
-## 2. Operational & Cost Analysis
+    with open(path, mode="w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
-### Ingestion Performance & Latency
-- **Total Ingested Claims**: 44
-- **Total Agent Node Runs**: 396 (9 agents * 44 claims)
-- **Average Ingest Latency**: ~0.08 seconds per claim (Mock/Fallback mode), ~2.4 seconds per claim (Live LLM mode)
-- **Cumulative Batch Runtime**: ~3.5 seconds total runtime (Mock/Fallback mode)
-
-### Token Usage & API Cost Analysis (Projected for Live LLM Mode)
-- **Model**: `gpt-4o-mini` (for intake, quality, vision, fraud, and decision nodes)
-- **Average Prompt Tokens per Claim**: ~1,800 tokens
-- **Average Completion Tokens per Claim**: ~350 tokens
-- **Pricing Assumptions**: 
-  - Input: $0.150 per 1M tokens
-  - Output: $0.600 per 1M tokens
-- **Token Costs Calculation**:
-  - Input Cost per Claim: 1,800 * $0.00000015 = $0.00027
-  - Output Cost per Claim: 350 * $0.0000006 = $0.00021
-  - **Total Cost per Claim**: **$0.00048** (less than 1/20th of a cent)
-  - **Batch Ingest Cost (44 Claims)**: **$0.02112** (approx. 2 cents)
-
----
-
-## 3. High-Load Production Strategies
-
-### Rate Limit Strategy
-- **Token Bucket Limiting**: The system implements an asynchronous request queue to cap model requests at 10,000 Tokens Per Minute (TPM) and 200 Requests Per Minute (RPM) in line with standard OpenAI tier-1 thresholds.
-- **Exponential Backoff**: Built-in HTTP client middleware automatically catches 429 errors and retries with a randomized jitter backoff.
-
-### Caching Strategy
-- **Redis Cache Layer**: The orchestrator hashes the `user_id` and raw image paths. If a cache hit occurs and the claim details match, the results are loaded from Redis directly, preventing repetitive vision/LLM runs for duplicated claims.
-- **SQLite/PostgreSQL Local Session Caching**: Claim state metadata is cached at the FastAPI dependency injection layer.
-
-### Retry Strategy
-- **Fault-Tolerant LangGraph Nodes**: Each agent execution is wrapped in a Python `try-except` block. If an LLM call fails due to timeouts or API disconnects, the node retries up to 3 times before failing gracefully and escalating the claim to `human_review` with the reason `"AI Node Timeout Exception"`.
-""")
-    print(f"Generated evaluation report: {report_path}")
 
 if __name__ == "__main__":
     evaluate_predictions()
