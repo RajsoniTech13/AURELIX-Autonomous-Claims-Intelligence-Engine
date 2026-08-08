@@ -4,3 +4,8 @@ google-genai
 Pillow
 python-dotenv
 numpy
+PyYAML>=6.0
+
+# Test suite (hermetic — no live API calls)
+pytest>=8.0
+pytest-asyncio>=0.24

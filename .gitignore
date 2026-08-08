@@ -61,3 +61,5 @@ Thumbs.db
 log.txt
 .env
 test_gemini.py
+
+PROMPT.md

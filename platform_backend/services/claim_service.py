@@ -108,9 +108,10 @@ def generate_claim_stream(
         "user_history": u_history or {},
         "evidence_rules": e_rules or {},
         "images": pil_images or [],
-        "image_validation": {}, "ingestion": {}, "vision": {}, "policy": {}, 
+        "image_base_dir": "",
+        "image_validation": {}, "ingestion": {}, "vision": {}, "policy": {},
         "similar_claims": {}, "user_risk": {}, "fraud": {}, "decision": {},
-        "audit_logs": [], "timeline": [],
+        "audit_logs": [], "timeline": [], "pipeline_errors": [],
     }
 
     yield f'data: {json.dumps({"stage": "image_validator", "status": "running"})}\n\n'
@@ -126,11 +127,12 @@ def generate_claim_stream(
             yield f'data: {json.dumps({"stage": node_name, "status": "complete", "timestamp": _now()})}\n\n'
 
             if node_name == "image_validator":
-                validation = final_state.get("image_validation", {})
-                if not validation.get("valid", True) and validation.get("file_count", 0) == 0:
-                    yield f'data: {json.dumps({"stage": "short_circuit_decision", "status": "running"})}\n\n'
-                else:
-                    yield f'data: {json.dumps({"stage": "claim_ingestion", "status": "running"})}\n\n'
+                # Ask the graph which way it will actually route rather than re-deriving
+                # the condition here. The duplicated copy of this logic had already
+                # drifted out of sync with the real router.
+                from agent_core.orchestrator.graph import route_after_validation
+                next_stage = route_after_validation(final_state)
+                yield f'data: {json.dumps({"stage": next_stage, "status": "running"})}\n\n'
             
             elif node_name == "claim_ingestion":
                 yield f'data: {json.dumps({"stage": "vision_analysis", "status": "running"})}\n\n'
