@@ -6,7 +6,7 @@ Never analyzes images. Never calculates risk.
 """
 from agent_core.services.gemini_client import call_gemini_text, compute_cache_key
 from agent_core.schemas.models import ClaimIngestionOutput
-from agent_core.prompts.templates import CLAIM_INGESTION_PROMPT
+from agent_core.prompts.templates import CLAIM_INGESTION_PROMPT, wrap_untrusted
 
 
 def run_claim_ingestion_agent(
@@ -14,10 +14,16 @@ def run_claim_ingestion_agent(
     claim_object: str,
     user_id: str = "",
 ) -> ClaimIngestionOutput:
-    """Extract structured claim information from conversation text using Gemini."""
+    """
+    Extract structured claim information from conversation text.
+
+    Raises `LLMUnavailableError` if the model cannot be reached — there is no fallback
+    parse, because a guessed `claimed_part` would silently corrupt every downstream
+    comparison.
+    """
     prompt = CLAIM_INGESTION_PROMPT.format(
-        conversation=conversation,
         claim_object=claim_object,
+        claim_text_block=wrap_untrusted(conversation),
     )
 
     cache_key = compute_cache_key(
