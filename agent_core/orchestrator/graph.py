@@ -40,8 +40,12 @@ from datetime import datetime, timezone
 
 from langgraph.graph import StateGraph, END
 
+from agent_core.schemas.models import BranchFailureOutput, DecisionOutput
+from agent_core.services.gemini_client import LLMUnavailableError
+
 # Agent imports
 from agent_core.agents.image_validator import run_image_validator
+from agent_core.agents.vision_analysis import cannot_assess
 from agent_core.agents.claim_ingestion import run_claim_ingestion_agent
 from agent_core.agents.vision_analysis import run_vision_analysis_agent
 from agent_core.agents.policy_verification import run_policy_verification_agent
@@ -66,6 +70,7 @@ class ClaimsState(TypedDict):
     user_history: Dict[str, Any]
     evidence_rules: Dict[str, Any]
     images: List[Any]  # PIL Image objects
+    image_base_dir: str  # root that relative image_paths resolve against
 
     # Agent outputs
     image_validation: Dict[str, Any]
@@ -80,6 +85,8 @@ class ClaimsState(TypedDict):
     # Audit trail (append-only)
     audit_logs: Annotated[List[Dict[str, Any]], add]
     timeline: Annotated[List[str], add]
+    # Real failures, surfaced rather than swallowed. Non-empty means the verdict is degraded.
+    pipeline_errors: Annotated[List[str], add]
 
 
 # ─── Node: Image Validator ──────────────────────────────────────────────────
@@ -90,6 +97,7 @@ def node_image_validator(state: ClaimsState) -> Dict[str, Any]:
     res = run_image_validator(
         images=state.get("images"),
         image_paths_str=state["image_paths"],
+        base_dir=state.get("image_base_dir", ""),
     )
     out = res.model_dump()
     return {
@@ -107,39 +115,68 @@ def node_image_validator(state: ClaimsState) -> Dict[str, Any]:
 # ─── Conditional edge: route after validation (feedback #2) ─────────────────
 
 def route_after_validation(state: ClaimsState) -> str:
-    """If images are invalid AND we have no path fallback, short-circuit."""
+    """
+    Short-circuit when there is no usable image evidence.
+
+    This is the single biggest cost control in the pipeline: a claim with nothing to look
+    at cannot produce a grounded verdict, so spending four LLM calls to discover that is
+    pure waste.
+
+    The previous condition also required `file_count == 0`, which meant a claim declaring
+    five image paths that all failed to load was treated as fully evidenced and sent down
+    the full pipeline. `valid` now means "at least one image genuinely loaded", so this
+    routes on the thing that actually matters.
+    """
     validation = state.get("image_validation", {})
-    if not validation.get("valid", True) and validation.get("file_count", 0) == 0:
-        return "short_circuit_decision"
-    return "claim_ingestion"
+    if validation.get("valid", False):
+        return "claim_ingestion"
+
+    # Escape hatch: with text-only inference explicitly enabled, continue without images.
+    from agent_core.services.config import evidence_config
+    if evidence_config()["allow_text_only_inference"]:
+        return "claim_ingestion"
+
+    return "short_circuit_decision"
 
 
-# ─── Node: Short-circuit Decision (bad input fast-fail) ─────────────────────
+# ─── Node: Short-circuit Decision (no usable evidence) ──────────────────────
 
 def node_short_circuit_decision(state: ClaimsState) -> Dict[str, Any]:
-    """Skip the entire pipeline when images are fundamentally broken."""
-    print("[Decision] Short-circuit: invalid images, skipping pipeline.")
+    """
+    Terminal state for claims with no usable image evidence.
+
+    Note what this deliberately does NOT do: it does not conclude the claim is false. It
+    concludes we cannot tell, routes to a human, and says exactly why.
+    """
+    print("[Decision] Short-circuit: no usable image evidence, skipping LLM pipeline.")
     validation = state.get("image_validation", {})
     issues = validation.get("issues", [])
-    out = {
-        "status": "success",
-        "summary": "Claim cannot be processed due to invalid image submission.",
-        "confidence": 95,
-        "claim_status": "not_enough_information",
-        "manual_review_required": False,
-        "escalation_reason": None,
-        "justification": f"Image validation failed before pipeline execution. Issues: {', '.join(issues)}. "
-                          f"The claimant must resubmit with valid image evidence.",
-    }
+    declared = validation.get("file_count", 0)
+
+    if declared == 0:
+        reason = "no image evidence was submitted with this claim."
+    else:
+        detail = ", ".join(issues[:5]) if issues else "none of the declared images could be read"
+        reason = (
+            f"all {declared} declared image(s) were unusable ({detail}); "
+            f"the claimant must resubmit readable evidence."
+        )
+
+    decision = DecisionOutput.from_failure(reason)
+    out = decision.model_dump()
+
     return {
         "decision": out,
+        # Populate vision with the explicit "could not look" finding so the output row is
+        # complete and honest rather than carrying empty cells.
+        "vision": cannot_assess(reason).model_dump(),
         "audit_logs": [{
             "agent_name": "Decision Agent (Short-Circuit)",
             "timestamp": _now(),
             "outputs": out,
-            "reasoning": "Fast-failed on invalid images to avoid wasting Gemini calls.",
+            "reasoning": "No usable image evidence; skipped all LLM calls.",
         }],
-        "timeline": ["✗ Short-circuited: invalid images"],
+        "timeline": ["✗ Short-circuited: no usable image evidence"],
     }
 
 
@@ -148,11 +185,33 @@ def node_short_circuit_decision(state: ClaimsState) -> Dict[str, Any]:
 def node_claim_ingestion(state: ClaimsState) -> Dict[str, Any]:
     print("[Agent 1] Claim Ingestion executing...")
     t = _now()
-    res = run_claim_ingestion_agent(
-        conversation=state["user_claim"],
-        claim_object=state["claim_object"],
-        user_id=state["user_id"],
-    )
+    try:
+        res = run_claim_ingestion_agent(
+            conversation=state["user_claim"],
+            claim_object=state["claim_object"],
+            user_id=state["user_id"],
+        )
+    except LLMUnavailableError as e:
+        # We do not guess the claimed part. Every downstream comparison is claimed-vs-observed;
+        # a fabricated `claimed_part` would corrupt the verdict while looking authoritative.
+        print(f"[Agent 1] Claim Ingestion UNAVAILABLE: {e}")
+        out = BranchFailureOutput(
+            summary="Claim intake could not be completed.",
+            error=str(e),
+            error_type=type(e).__name__,
+        ).model_dump()
+        return {
+            "ingestion": out,
+            "pipeline_errors": [f"claim_ingestion: {e}"],
+            "audit_logs": [{
+                "agent_name": "Claim Ingestion Agent",
+                "timestamp": t,
+                "outputs": out,
+                "reasoning": f"Branch failed: {e}",
+            }],
+            "timeline": ["✗ Claim Parsing Failed"],
+        }
+
     out = res.model_dump()
     return {
         "ingestion": out,
@@ -166,7 +225,24 @@ def node_claim_ingestion(state: ClaimsState) -> Dict[str, Any]:
     }
 
 
-# ─── Parallel Nodes (each wrapped in try/except for branch failure, feedback #4) ─
+# ─── Parallel branches ──────────────────────────────────────────────────────
+#
+# Each branch is isolated: a failure degrades the verdict toward
+# not_enough_information, it never takes the whole claim down, and it never silently
+# reads as a passing check. Downstream prompts are explicit that `status: failed`
+# means UNKNOWN, not OK.
+
+def _branch_failure(node: str, exc: BaseException) -> Dict[str, Any]:
+    """Uniform failure payload for a parallel branch."""
+    print(f"[{node}] FAILED: {exc}")
+    if not isinstance(exc, LLMUnavailableError):
+        traceback.print_exc()
+    return BranchFailureOutput(
+        summary=f"{node} failed: {exc}",
+        error=str(exc),
+        error_type=type(exc).__name__,
+    ).model_dump()
+
 
 def node_vision_analysis(state: ClaimsState) -> Dict[str, Any]:
     print("[Agent 2] Vision Analysis executing...")
@@ -183,14 +259,15 @@ def node_vision_analysis(state: ClaimsState) -> Dict[str, Any]:
         )
         out = res.model_dump()
         reasoning = res.justification
+        errors: List[str] = []
     except Exception as e:
-        print(f"[Agent 2] Vision Analysis FAILED: {e}")
-        traceback.print_exc()
-        out = {"status": "failed", "summary": f"Vision analysis failed: {str(e)}", "error": str(e)}
+        out = _branch_failure("Vision Analysis", e)
         reasoning = f"Branch failed with error: {e}"
+        errors = [f"vision_analysis: {e}"]
 
     return {
         "vision": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "Vision Analysis Agent",
             "timestamp": t,
@@ -217,13 +294,15 @@ def node_policy_verification(state: ClaimsState) -> Dict[str, Any]:
         )
         out = res.model_dump()
         reasoning = res.reason
+        errors = []
     except Exception as e:
-        print(f"[Agent 3] Policy Verification FAILED: {e}")
-        out = {"status": "failed", "summary": f"Policy check failed: {str(e)}", "error": str(e)}
+        out = _branch_failure("Policy Verification", e)
         reasoning = f"Branch failed with error: {e}"
+        errors = [f"policy_verification: {e}"]
 
     return {
         "policy": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "Policy Verification Agent",
             "timestamp": t,
@@ -245,13 +324,15 @@ def node_similar_claims(state: ClaimsState) -> Dict[str, Any]:
         )
         out = res.model_dump()
         reasoning = res.summary
+        errors = []
     except Exception as e:
-        print(f"[Agent 4] Similar Claims FAILED: {e}")
-        out = {"status": "failed", "summary": f"Similar claims retrieval failed: {str(e)}", "error": str(e)}
+        out = _branch_failure("Similar Claims", e)
         reasoning = f"Branch failed with error: {e}"
+        errors = [f"similar_claims: {e}"]
 
     return {
         "similar_claims": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "Similar Claims Agent",
             "timestamp": t,
@@ -272,13 +353,15 @@ def node_user_risk(state: ClaimsState) -> Dict[str, Any]:
         )
         out = res.model_dump()
         reasoning = res.summary
+        errors = []
     except Exception as e:
-        print(f"[Agent 5] User Risk FAILED: {e}")
-        out = {"status": "failed", "summary": f"User risk check failed: {str(e)}", "error": str(e)}
+        out = _branch_failure("User Risk", e)
         reasoning = f"Branch failed with error: {e}"
+        errors = [f"user_risk: {e}"]
 
     return {
         "user_risk": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "User Risk Agent",
             "timestamp": t,
@@ -294,52 +377,81 @@ def node_user_risk(state: ClaimsState) -> Dict[str, Any]:
 def node_fraud_review(state: ClaimsState) -> Dict[str, Any]:
     print("[Agent 6] Fraud Review executing...")
     t = _now()
-    res = run_fraud_review_agent(
-        claim_text=state["user_claim"],
-        ingestion=state.get("ingestion", {}),
-        vision=state.get("vision", {}),
-        policy=state.get("policy", {}),
-        user_risk=state.get("user_risk", {}),
-        user_id=state["user_id"],
-    )
-    out = res.model_dump()
+    try:
+        res = run_fraud_review_agent(
+            claim_text=state["user_claim"],
+            ingestion=state.get("ingestion", {}),
+            vision=state.get("vision", {}),
+            policy=state.get("policy", {}),
+            user_risk=state.get("user_risk", {}),
+            user_id=state["user_id"],
+        )
+        out = res.model_dump()
+        reasoning = res.reasoning
+        errors = []
+    except Exception as e:
+        # A fraud check we could not run is not a clean bill of health. It is recorded as
+        # unknown, and the decision node is told to treat it that way.
+        out = _branch_failure("Fraud Review", e)
+        reasoning = f"Fraud review unavailable: {e}"
+        errors = [f"fraud_review: {e}"]
+
     return {
         "fraud": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "Fraud Review Agent",
             "timestamp": t,
             "outputs": out,
-            "reasoning": res.reasoning,
+            "reasoning": reasoning,
         }],
-        "timeline": ["✓ Fraud Reviewed"],
+        "timeline": ["✓ Fraud Reviewed" if out.get("status") != "failed" else "✗ Fraud Review Failed"],
     }
 
 
 # ─── Node: Decision ─────────────────────────────────────────────────────────
 
 def node_decision(state: ClaimsState) -> Dict[str, Any]:
+    """
+    Final verdict.
+
+    If the model is unavailable here, we emit the honest error state — a
+    `not_enough_information` verdict, confidence 0, flagged for human review, carrying the
+    real reason. We never synthesise an approval. The old client returned a hardcoded
+    `supported`/85 for exactly this case.
+    """
     print("[Agent 7] Decision executing...")
     t = _now()
-    res = run_decision_agent(
-        ingestion=state.get("ingestion", {}),
-        vision=state.get("vision", {}),
-        policy=state.get("policy", {}),
-        similar_claims=state.get("similar_claims", {}),
-        user_risk=state.get("user_risk", {}),
-        fraud=state.get("fraud", {}),
-        user_id=state["user_id"],
-        claim_text=state["user_claim"],
-    )
+    try:
+        res = run_decision_agent(
+            ingestion=state.get("ingestion", {}),
+            vision=state.get("vision", {}),
+            policy=state.get("policy", {}),
+            similar_claims=state.get("similar_claims", {}),
+            user_risk=state.get("user_risk", {}),
+            fraud=state.get("fraud", {}),
+            user_id=state["user_id"],
+            claim_text=state["user_claim"],
+        )
+        errors = []
+    except Exception as e:
+        print(f"[Agent 7] Decision UNAVAILABLE: {e}")
+        res = DecisionOutput.from_failure(
+            f"the decision model could not be reached ({type(e).__name__}: {e})."
+        )
+        errors = [f"decision: {e}"]
+
     out = res.model_dump()
     return {
         "decision": out,
+        "pipeline_errors": errors,
         "audit_logs": [{
             "agent_name": "Decision Agent",
             "timestamp": t,
             "outputs": out,
             "reasoning": res.justification,
         }],
-        "timeline": ["✓ Decision Generated"],
+        "timeline": ["✓ Decision Generated" if not errors else "✗ Decision Unavailable"],
     }
 
 
@@ -407,10 +519,14 @@ def process_claim(
     user_history: dict | None = None,
     evidence_rules: dict | None = None,
     images: list | None = None,
+    image_base_dir: str = "",
 ) -> dict:
     """
-    Public API to run the full 7-agent claims analysis graph.
-    Returns the final ClaimsState dict.
+    Run the claims analysis graph over one claim. Returns the final state dict.
+
+    `image_base_dir` is the root that relative entries in `image_paths` resolve against.
+    Supply decoded `images` directly (web upload path) or let the validator load them
+    from disk (CSV batch path).
     """
     if isinstance(image_paths, list):
         image_paths = ";".join(image_paths)
@@ -423,6 +539,7 @@ def process_claim(
         "user_history": user_history or {},
         "evidence_rules": evidence_rules or {},
         "images": images or [],
+        "image_base_dir": image_base_dir,
         # Agent output slots (initialized empty)
         "image_validation": {},
         "ingestion": {},
@@ -434,6 +551,7 @@ def process_claim(
         "decision": {},
         "audit_logs": [],
         "timeline": [],
+        "pipeline_errors": [],
     }
 
     return compiled_graph.invoke(initial_state)
@@ -449,4 +567,5 @@ def run_claims_orchestrator(claim_data: Dict[str, Any]) -> Dict[str, Any]:
         user_history=claim_data.get("user_history"),
         evidence_rules=claim_data.get("evidence_rules"),
         images=claim_data.get("images"),
+        image_base_dir=claim_data.get("image_base_dir", ""),
     )
