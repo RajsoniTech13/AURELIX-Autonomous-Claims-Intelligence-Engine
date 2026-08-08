@@ -26,7 +26,9 @@ Five things matter more than everything else in this document:
    `@retry_on_api_error` decorator can see it. Zero retries ever execute.
 5. **The reported 100% F1 is not a valid measurement** and cannot be reproduced.
 
-The parallel fan-out in the graph is also not parallel — measured node latencies are purely additive.
+*(An earlier revision of this document also claimed the fan-out does not run concurrently.
+That was wrong — see the correction in §2.3. The fan-out is genuinely concurrent; the
+latency comes from a serial chain of four LLM round trips.)*
 
 ---
 
@@ -157,14 +159,52 @@ claim node                       wall_ms  llm   tok_in  tok_out  err
 - **Retries: zero observed.** Every 429 resolved in ~200 ms with a single attempt. The API returned
   `RetryInfo { retryDelay: "47s" }` and it was discarded.
 
-### 2.3 The fan-out is sequential
+### 2.3 The latency is a serial chain of LLM calls
 
-For claim 1, the sum of node latencies is `5878 + 31 + 9034 + 5462 + 6881 = 27,286 ms` against a
-measured end-to-end of `27,265 ms`. The two agree to within 0.1%. **There is no overlap between the
-four "parallel" branches.** `compiled_graph.invoke()` on a graph of synchronous node functions
-executes each superstep's nodes one after another on a single thread. The topology in `graph.py` is a
-DAG on paper and a straight line at runtime — so it currently pays the complexity cost of fan-out
-with none of the benefit.
+> **CORRECTED 2026-08-08.** This section originally claimed the fan-out does not run
+> concurrently. **That was wrong**, and the reasoning behind it was invalid. Corrected below;
+> the original inference is preserved so the error is auditable.
+>
+> *Original claim:* for claim 1 the node latencies sum to `5878 + 31 + 9034 + 5462 + 6881 =
+> 27,286 ms` against a measured end-to-end of `27,265 ms` — agreement to 0.1%, therefore no
+> overlap.
+>
+> *Why that does not follow:* of the four "parallel" branches, only `vision_analysis` does
+> meaningful work (9,034 ms). `policy_verification` and `user_risk` are 0 ms and
+> `similar_claims` is 31 ms — all deterministic Python. So the parallel section's wall time is
+> `max(9034, 31, 0, 0) ≈ 9034` either way. Sum ≈ total is equally consistent with perfect
+> concurrency. I mistook a degenerate case for evidence.
+
+Measured directly against the installed LangGraph (1.2.6), four branches each sleeping 1.0 s:
+
+| Execution mode | Wall clock |
+|---|---:|
+| sync nodes + `.invoke()` | **1.01 s** |
+| sync nodes + `.ainvoke()` | **1.00 s** |
+| async nodes + `.ainvoke()` | **1.00 s** |
+
+Concurrent, in every mode. Sync node functions are dispatched to a thread pool, so a
+blocking node does not stall its siblings.
+
+**The real latency structure** is the serial chain, not the fan-out:
+
+```
+ingest → vision → fraud → decision
+5.9s      9.0s     5.5s     6.9s      = 27.3s of strictly sequential LLM round trips
+```
+
+The fan-out contributes nothing to the critical path because three of its four branches are
+free. The fix is therefore **fewer sequential round trips** (collapse ingest+vision into one
+multimodal call; keep fraud/decision deterministic), not "make the fan-out parallel" — it
+already is.
+
+A second, separate serialiser existed in the old client: `APIRateLimiter.wait()` held a
+`threading.Lock` *across* its `time.sleep()`, so every concurrent branch queued behind one
+mutex. That is fixed in Phase 0.5 — the replacement governor sleeps outside the lock.
+
+Also confirmed: LangGraph raises `InvalidUpdateError` when two concurrent nodes write the
+same state key without a reducer, so disjoint state slices are enforced by the framework
+rather than by convention.
 
 ---
 
@@ -272,11 +312,16 @@ scored vocabulary do not intersect on 3 of 4 values.** `response_schema` is corr
 `GenerateContentConfig` (`:230-234`) — the mechanism is right, the schema is just empty of
 constraints, so it buys nothing beyond JSON-shape.
 
-**P1-3 · Committed API key prefix**
+**P1-3 · Committed API key prefix** — *severity downgraded, see note*
 `agent_core/README.md:54` contains `GEMINI_API_KEY=AQ.Ab8RN...`. Present in **2 commits**
-(`ff084a1`, `e4ce2159`). I verified against the live `.env`: this is a genuine prefix of the real
-key — 8 of 53 characters (15%). Not directly exploitable alone, but it confirms the key format and
-first bytes, and the full key is live on disk.
+(`ff084a1`, `e4ce2159`), and it is a genuine prefix of the then-live key (8 of 53 characters).
+
+> **CORRECTED 2026-08-08.** I originally described this as leaking key material. After the key
+> was rotated, the *replacement* key is also 53 characters and also begins `AQ.Ab8RN` —
+> confirming this is a **structural prefix common to all Gemini keys of this generation**, not
+> a secret-bearing fragment. Leaking it is closer to leaking `sk-` from an OpenAI key.
+> **Real severity: low, not moderate.** Rotation was still correct and has been done; the
+> history purge in `docs/SECRET_ROTATION.md` is now optional hygiene rather than remediation.
 `.env` itself is **not tracked** and `.gitignore` already covers `.env`, `.env.local`, `.env*.local`
 (lines 34-38) — so the gitignore work is already done. **Rotate the key regardless**, then purge the
 README line from history. No other secrets found: a scan of all 4 commits for `AIza*`, `sk-*`, and

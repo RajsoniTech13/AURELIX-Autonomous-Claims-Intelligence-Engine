@@ -8,11 +8,15 @@
 GEMINI_API_KEY=AQ.Ab8RN...   # Or use OPENAI_API_KEY
 ```
 
-Present in commits `ff084a1` and `e4ce2159`. Verified against the live `.env`: this is a
-genuine prefix of the real key — **8 of 53 characters (15%)**, not a placeholder.
+Present in commits `ff084a1` and `e4ce2159`.
 
-Not full-key exposure, so not directly usable on its own. But it confirms the key's format
-and leading bytes, and the working key is live on disk. **Rotate it.**
+**Severity: low.** This was initially assessed as moderate. After rotation, the replacement
+key is also 53 characters and also begins `AQ.Ab8RN` — so this is a **structural prefix shared
+by all Gemini API keys of this generation**, not a fragment of the secret. Comparable to
+leaking `sk-` from an OpenAI key.
+
+**Status: rotated on 2026-08-08.** The exposed key is dead. Nothing below is urgent; steps 3
+and 4 are hygiene.
 
 What was *not* exposed: `.env` is untracked, and `.gitignore` already covers `.env`,
 `.env.local`, and `.env*.local` (lines 34-38). A scan of all four commits for `AIza*`,

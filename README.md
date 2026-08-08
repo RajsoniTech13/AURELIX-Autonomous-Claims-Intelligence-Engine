@@ -90,10 +90,10 @@ Each claim runs through a LangGraph `StateGraph` of **9 nodes** — 7 agents, pl
 image pre-flight and a short-circuit path for claims with no usable evidence. Four agents
 call Gemini; three are deterministic Python.
 
-> **Note on concurrency:** the graph is written as a fan-out, but a synchronous
-> `.invoke()` executes each superstep's nodes sequentially, so the four middle branches do
-> not currently overlap. Measured node latencies sum to the measured end-to-end time.
-> Making the fan-out genuinely concurrent is Phase 2 work — see `docs/AUDIT.md` §2.3.
+> **Note on latency:** the fan-out does run concurrently (measured: four 1-second branches
+> complete in 1.01s). The 27s per-claim latency comes from the *serial chain* of four LLM
+> round trips — ingest → vision → fraud → decision — not from the fan-out. Collapsing those
+> calls is Phase 2 work; see `docs/AUDIT.md` §2.3.
 
 1. **Image Validator** *(deterministic)*: Verifies images exist, decode, and meet minimum
    resolution before any LLM call. A claim with no usable image short-circuits straight to
