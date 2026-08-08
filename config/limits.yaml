@@ -1,0 +1,71 @@
+# AURELIX — API quota and resilience limits.
+#
+# Free-tier vs paid tier is a config change, not a code change.
+#
+# The `free` values below are what the Gemini API actually reported for this project.
+# Both were observed directly in 429 bodies during Phase 0/0.5 verification:
+#   GenerateRequestsPerMinutePerProjectPerModel-FreeTier  quotaValue: 5
+#   GenerateRequestsPerDayPerProjectPerModel-FreeTier     quotaValue: 20
+#
+# Read that daily figure again: **20 requests per day**. At the current 4 LLM calls per
+# claim that is FIVE CLAIMS PER DAY. The free tier cannot process the 44-claim batch at
+# all — not slowly, not at all. Collapsing 4 calls into 1 (Phase 2) raises the ceiling to
+# 20 claims/day, which is still below the batch size. A paid tier is required to run the
+# full dataset; see docs/PHASE_0.5_REPORT.md.
+#
+# The code previously assumed 15 RPM and tracked no daily budget at all.
+# Do not raise these without checking the live quota.
+
+active_tier: free
+
+tiers:
+  free:
+    models:
+      gemini-2.5-flash:
+        rpm: 5
+        tpm: 250000
+        rpd: 20
+      gemini-2.5-flash-lite:
+        rpm: 15
+        tpm: 250000
+        rpd: 1000
+    default:
+      rpm: 5
+      tpm: 250000
+      rpd: 20
+
+  paid:
+    models:
+      gemini-2.5-flash:
+        rpm: 1000
+        tpm: 1000000
+        rpd: 10000
+      gemini-2.5-flash-lite:
+        rpm: 4000
+        tpm: 4000000
+        rpd: 100000
+    default:
+      rpm: 1000
+      tpm: 1000000
+      rpd: 10000
+
+retry:
+  max_attempts: 4
+  base_delay_seconds: 1.0
+  max_delay_seconds: 32.0
+  # Only these are retried. 400/401/403 are bugs or bad credentials — fail fast, loudly.
+  retryable_status_codes: [429, 500, 502, 503, 504]
+
+circuit_breaker:
+  # After this many consecutive failures, stop hammering the API and fail fast.
+  failure_threshold: 5
+  cooldown_seconds: 60
+
+evidence:
+  # When a claim declares image paths but no readable image can be loaded, the honest
+  # answer is not_enough_information. Setting this to true lets the model infer from
+  # claim text alone — which is guesswork, and is flagged as such in the output.
+  # Default OFF: silently inferring damage from a filename is how the old pipeline
+  # produced 44 rows of hallucinated findings.
+  allow_text_only_inference: false
+  max_images_per_claim: 6
