@@ -99,11 +99,7 @@ circuit_breaker:
   failure_threshold: 5
   cooldown_seconds: 60
 
-evidence:
-  # When a claim declares image paths but no readable image can be loaded, the honest
-  # answer is not_enough_information. Setting this to true lets the model infer from
-  # claim text alone — which is guesswork, and is flagged as such in the output.
-  # Default OFF: silently inferring damage from a filename is how the old pipeline
-  # produced 44 rows of hallucinated findings.
-  allow_text_only_inference: false
-  max_images_per_claim: 6
+# The `evidence:` block is gone. It held `allow_text_only_inference`, which let the old
+# graph analyse a claim from its text when no image loaded. The batched pipeline never
+# asks: no usable image short-circuits to not_enough_information at preflight. See the
+# note in agent_core/services/config.py. `max_images_per_claim` lives under `batching`.

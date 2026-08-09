@@ -11,41 +11,54 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from agent_core.agents.image_validator import load_valid_images, run_image_validator
-from agent_core.orchestrator.graph import ClaimsState, route_after_validation
-from agent_core.output_mapper import build_output_row
+from agent_core.agents.image_validator import load_valid_images, preflight, run_image_validator
 from agent_core.prompts.templates import detect_injection, wrap_untrusted
+from agent_core.schemas.contract import OUTPUT_COLUMNS
+from agent_core.schemas.perception import (
+    ClaimIntent,
+    ClaimPerception,
+    DamageAnalysis,
+    ImageQualityFinding,
+    ObservedDamage,
+)
+from agent_core.service import judge, to_output_row
 
 
-# ─── P0-1 regression ────────────────────────────────────────────────────────
-
-def test_output_mapper_only_reads_keys_the_graph_declares():
-    """
-    Every state key the mapper consumes must exist in ClaimsState.
-
-    `main.py` used to read `quality`, `compliance`, and `escalation` — none of which the
-    graph has ever written — so every claim raised KeyError and was silently dropped.
-    """
-    declared = set(ClaimsState.__annotations__)
-    consumed = {"decision", "vision", "policy", "image_validation", "user_risk", "fraud"}
-    missing = consumed - declared
-    assert not missing, f"output_mapper reads state keys the graph never writes: {missing}"
+def build_row(row=None, **entry):
+    """Judge a partial entry and render it. The web and CLI paths both go through this."""
+    return to_output_row(judge({"claim_id": "c", "row": row or {}, "perception": None, **entry}))
 
 
-def test_dead_state_keys_are_really_absent():
-    """Pin the specific names, so reintroducing them fails loudly rather than silently."""
-    declared = set(ClaimsState.__annotations__)
-    for dead in ("quality", "compliance", "escalation"):
-        assert dead not in declared
+# ─── P0-1 regression, carried forward ───────────────────────────────────────
+#
+# The original defect: `main.py` read state keys (`quality`, `compliance`, `escalation`)
+# that the graph never wrote, so every claim raised KeyError and was silently dropped —
+# 44 failures became an empty output file. Both the mapper and the untyped state dict it
+# read are gone; `to_output_row` now consumes a judged result whose shape is fixed by
+# `judge`. The class of bug is structurally impossible, so what remains worth pinning is
+# the *guarantee* it violated: a claim always produces a complete, valid row.
 
-
-def test_mapper_never_raises_on_any_partial_state():
-    for state in ({}, {"decision": {}}, {"vision": {}, "policy": {}},
-                  {"decision": None, "vision": None}):
-        row = build_output_row(state or {}, {"user_id": "u"})
+def test_a_row_is_produced_for_every_degenerate_case():
+    for entry in ({}, {"no_usable_image": True}, {"perception_failed": True},
+                  {"no_usable_image": True, "perception_failed": True}):
+        row = build_row({"user_id": "u"}, **entry)
         assert row["claim_status"] in (
             "supported", "contradicted", "not_enough_information"
         )
+        assert set(row) == set(OUTPUT_COLUMNS)
+
+
+def test_an_unassessable_claim_says_unknown_not_none():
+    """
+    'unknown' means we could not look; 'none' means we looked and saw nothing. Collapsing
+    them is what turns a missing photograph into a contradicted claim.
+    """
+    row = build_row({"user_id": "u"}, no_usable_image=True)
+    assert row["severity"] == "unknown"
+    assert row["issue_type"] == "unknown"
+    assert row["supporting_image_ids"] == "none"
+    assert row["valid_image"] == "false"
+    assert row["claim_status"] == "not_enough_information"
 
 
 # ─── Evidence handling (P0-2) ───────────────────────────────────────────────
@@ -113,21 +126,35 @@ def test_load_valid_images_skips_missing_and_caps(tmp_path: Path):
 
 
 # ─── Routing ────────────────────────────────────────────────────────────────
+#
+# `route_after_validation` is gone with the graph. The same decision now lives in
+# `preflight`: whether a claim is worth sending. The end-to-end consequence — that an
+# unusable claim costs zero requests — is asserted in test_backend_pipeline.py.
 
-def test_unusable_evidence_short_circuits():
-    assert route_after_validation({"image_validation": {"valid": False, "file_count": 5}}) \
-        == "short_circuit_decision"
+def test_unusable_evidence_is_refused_before_any_model_call(tmp_path: Path):
+    validation, images, quality = preflight("gone.jpg", base_dir=str(tmp_path))
+    assert validation.valid is False
+    assert images == []
+    assert quality.measured is False
 
 
-def test_usable_evidence_proceeds():
-    assert route_after_validation({"image_validation": {"valid": True, "file_count": 1}}) \
-        == "claim_ingestion"
+def test_usable_evidence_is_loaded_and_measured(tmp_path: Path):
+    Image.new("RGB", (640, 480), "grey").save(tmp_path / "photo.jpg")
+    validation, images, quality = preflight("photo.jpg", base_dir=str(tmp_path))
+    assert validation.valid is True
+    assert len(images) == 1
+    assert quality.measured is True
 
 
-def test_text_only_opt_in_bypasses_short_circuit(monkeypatch):
+def test_there_is_no_text_only_escape_hatch(monkeypatch, tmp_path: Path):
+    """
+    The old graph had an opt-in that analysed a claim from its text when no image loaded.
+    It is gone, and the env var that enabled it must no longer resurrect it — inferring
+    damage from a filename is how the pre-Phase-0.5 pipeline produced 44 hallucinated rows.
+    """
     monkeypatch.setenv("AURELIX_ALLOW_TEXT_ONLY", "true")
-    assert route_after_validation({"image_validation": {"valid": False, "file_count": 2}}) \
-        == "claim_ingestion"
+    validation, images, _ = preflight("gone.jpg", base_dir=str(tmp_path))
+    assert validation.valid is False and images == []
 
 
 # ─── Prompt injection (P1-4) ────────────────────────────────────────────────
@@ -168,8 +195,23 @@ def test_claimant_cannot_forge_the_closing_delimiter():
 
 
 def test_injection_flag_reaches_the_output_row():
-    row = build_output_row(
-        {"fraud": {"fraud_flags": ["text_injection"]}, "decision": {"claim_status": "supported"}},
-        {"user_id": "u"},
+    """Detection is worthless if the flag stops before the CSV the grader reads."""
+    perception = ClaimPerception(
+        claim_id="c", observed_object="car",
+        image_quality=ImageQualityFinding(overall="good", score=90, issues=["none"]),
+        claim_understanding=ClaimIntent(
+            object_category="car", claimed_part="front_bumper",
+            claimed_issue="dent", claimed_severity="medium",
+        ),
+        damage_analysis=DamageAnalysis(damage_detected=True, damaged_parts=[
+            ObservedDamage(part="front_bumper", issue_type="dent", severity="medium",
+                           image_id="img_1", visual_confidence=90),
+        ]),
+        claimed_part_visible=True, supporting_image_ids=["img_1"],
+        instruction_like_text_present=True,
     )
+    row = to_output_row(judge({
+        "claim_id": "c", "row": {"user_id": "u", "claim_object": "car"},
+        "perception": perception,
+    }))
     assert "text_instruction_present" in row["risk_flags"]

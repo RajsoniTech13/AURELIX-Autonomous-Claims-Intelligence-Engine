@@ -90,18 +90,27 @@ def test_decision_from_failure_never_claims_support():
     assert d.status == "error"
 
 
-def test_cannot_assess_uses_unknown_not_none():
+def test_an_unassessable_claim_uses_unknown_not_none():
     """
     'unknown' means we could not look. 'none' means we looked and saw no damage.
     Collapsing them is what turns a missing photo into a contradicted claim.
+
+    This used to be asserted on `vision_analysis.cannot_assess`, which produced the
+    honest-failure object for the old per-claim graph. That graph is gone; the same
+    guarantee now has to hold at the CSV boundary, which is where it actually matters.
     """
-    from agent_core.agents.vision_analysis import cannot_assess
-    v = cannot_assess("no image was supplied.")
-    assert v.severity == "unknown"
-    assert v.issue_type == "unknown"
-    assert v.claimed_part_visible is False
-    assert v.supporting_image_ids == []
-    assert v.damage_detected is False
+    from agent_core.service import judge, to_output_row
+
+    for entry in ({"no_usable_image": True}, {"perception_failed": True}):
+        row = to_output_row(judge({
+            "claim_id": "c", "row": {"user_id": "u", "claim_object": "car"},
+            "perception": None, **entry,
+        }))
+        assert row["severity"] == "unknown"
+        assert row["issue_type"] == "unknown"
+        assert row["object_part"] == "unknown"
+        assert row["supporting_image_ids"] == "none"
+        assert row["claim_status"] == "not_enough_information"
 
 
 # ─── Schema-level enforcement ───────────────────────────────────────────────

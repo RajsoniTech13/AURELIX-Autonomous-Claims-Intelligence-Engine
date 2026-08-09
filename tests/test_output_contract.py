@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_core.output_mapper import build_output_row
+from agent_core.service import judge, to_output_row
 from agent_core.schemas.contract import (
     ISSUE_TYPE_VALUES,
     OUTPUT_COLUMNS,
@@ -39,29 +39,34 @@ def test_header_is_frozen():
     assert len(OUTPUT_COLUMNS) == 14
 
 
+def _row(raw_claim: dict, **entry) -> dict:
+    """Render a judged claim. Both the CLI and the API reach the CSV through this pair."""
+    return to_output_row(judge({
+        "claim_id": "c", "row": raw_claim, "perception": None, **entry,
+    }))
+
+
 def test_built_row_has_exactly_the_contract_columns():
-    row = build_output_row({}, {"user_id": "u1"})
-    assert list(row.keys()) == list(OUTPUT_COLUMNS)
+    assert list(_row({"user_id": "u1"}).keys()) == list(OUTPUT_COLUMNS)
 
 
-def test_empty_state_still_produces_a_complete_valid_row():
+def test_a_failed_claim_still_produces_a_complete_valid_row():
     """
     A short-circuited or crashed claim must still yield a full row.
 
     The regression this guards: main.py used to raise KeyError on partial state, swallow
     it, and skip the claim entirely — turning 44 failures into an empty output file.
     """
-    row = build_output_row({}, {"user_id": "u1", "claim_object": "car"})
+    row = _row({"user_id": "u1", "claim_object": "car"}, no_usable_image=True)
     assert row["claim_status"] == "not_enough_information"
     assert row["severity"] == "unknown"
     assert row["valid_image"] == "false"
     assert row["supporting_image_ids"] == "none"
-    assert row["risk_flags"] == "none"
     assert all(v != "" for k, v in row.items() if k not in ("image_paths", "user_claim"))
 
 
 def test_no_cell_is_ever_empty_string_for_vocabulary_columns():
-    row = build_output_row({"vision": {}, "decision": {}}, {})
+    row = _row({}, perception_failed=True)
     for col in ("issue_type", "object_part", "severity", "claim_status",
                 "risk_flags", "supporting_image_ids", "valid_image", "evidence_standard_met"):
         assert row[col].strip(), f"{col} must never be blank"

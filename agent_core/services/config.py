@@ -58,11 +58,13 @@ def circuit_breaker_config() -> Dict[str, Any]:
     return load_config()["circuit_breaker"]
 
 
-def evidence_config() -> Dict[str, Any]:
-    cfg = dict(load_config()["evidence"])
-    # Env override so a CLI flag can turn text-only inference on for one run without
-    # editing the file (and without it silently persisting).
-    override = os.getenv("AURELIX_ALLOW_TEXT_ONLY")
-    if override is not None:
-        cfg["allow_text_only_inference"] = override.strip().lower() in ("1", "true", "yes")
-    return cfg
+# `evidence_config()` and the `evidence:` block it read are gone.
+#
+# They controlled `allow_text_only_inference`: an opt-in that let the old graph analyse a
+# claim from its text when no image loaded. The batched pipeline never asks. A claim with
+# no usable image short-circuits at preflight to not_enough_information, because a finding
+# invented from a filename is a guess wearing the costume of an observation — which is
+# precisely how the pre-Phase-0.5 pipeline produced 44 rows of hallucinated damage.
+#
+# The option was left in place through Phase 2/4 and read by nobody. A configuration knob
+# that silently does nothing is worse than no knob, so it is removed rather than preserved.
