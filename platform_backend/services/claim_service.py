@@ -111,6 +111,16 @@ def _audit_logs_for(analysis: ClaimAnalysis) -> List[Dict[str, Any]]:
         ),
     })
 
+    matches = analysis.duplicate_matches
+    logs.append({
+        "agent_name": "duplicate_check",
+        "inputs": {}, "outputs": {"matches": [m.to_dict() for m in matches]},
+        "reasoning": (
+            " ".join(m.describe() for m in matches) if matches
+            else "No image in this claim has been submitted under another claim."
+        ),
+    })
+
     if analysis.perception:
         p = analysis.perception
         logs.append({

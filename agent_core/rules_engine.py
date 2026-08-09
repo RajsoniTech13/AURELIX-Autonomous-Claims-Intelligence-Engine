@@ -250,6 +250,7 @@ def decide(
     user_history_risk: bool = False,
     extra_risk_flags: Optional[List[str]] = None,
     preflight_quality: Optional[PreflightQuality] = None,
+    evidence_notes: Optional[List[str]] = None,
 ) -> Verdict:
     """Run the ordered rules. First match wins; its rule_id is recorded."""
     rules = load_rules()
@@ -302,7 +303,13 @@ def decide(
         risk_flags.append("manual_review_required")
 
     # ── justification ──
+    #
+    # `evidence_notes` carries facts the rules cannot express in a static reason string —
+    # currently the identity of the prior claim a reused photograph came from. A verdict
+    # that says "an image was submitted before" without saying *which* claim is not
+    # actionable by a reviewer and not answerable to the claimant.
     parts = [matched["reason"]]
+    parts.extend(evidence_notes or [])
     if alignment and alignment.notes:
         parts.append(" ".join(n[0].upper() + n[1:] + "." for n in alignment.notes[:2]))
     if perception and perception.supporting_image_ids:

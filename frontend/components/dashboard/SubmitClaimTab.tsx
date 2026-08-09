@@ -17,6 +17,7 @@ type PipelineStages = Record<string, StageStatus>;
 // re-derived without spending quota.
 const INITIAL_STAGES: PipelineStages = {
   preflight: "pending",
+  duplicate_check: "pending",
   perception: "pending",
   policy_verification: "pending",
   user_risk: "pending",

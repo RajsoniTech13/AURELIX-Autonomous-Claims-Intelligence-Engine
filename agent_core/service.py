@@ -43,6 +43,7 @@ from agent_core.agents.perception import (
 )
 from agent_core.agents.policy_verification import run_policy_verification_agent
 from agent_core.agents.user_risk import run_user_risk_agent
+from agent_core.retrieval.image_index import DuplicateMatch, ImageIndex, indexable
 from agent_core.rules_engine import Verdict, decide, effective_quality
 from agent_core.schemas.contract import (
     ISSUE_TYPE_VALUES,
@@ -62,6 +63,7 @@ from agent_core.services.gemini_client import DailyQuotaExhausted, LLMUnavailabl
 # invent their own list and drift; the guardrail tests assert this is what actually runs.
 PIPELINE_STAGES: tuple[str, ...] = (
     "preflight",
+    "duplicate_check",
     "perception",
     "policy_verification",
     "user_risk",
@@ -85,6 +87,7 @@ class ClaimAnalysis:
     validation: Optional[ImageValidatorOutput] = None
     policy: Optional[Any] = None
     user_risk: Optional[Any] = None
+    duplicate_matches: List[DuplicateMatch] = field(default_factory=list)
     llm_requests: int = 0
     error: Optional[str] = None
     timeline: List[Dict[str, str]] = field(default_factory=list)
@@ -113,6 +116,7 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
         user_history_risk=entry.get("user_history_risk", False),
         extra_risk_flags=list(getattr(entry.get("validation"), "risk_flags", []) or []),
         preflight_quality=quality,
+        evidence_notes=[m.describe() for m in entry.get("duplicate_matches") or []],
     )
 
     return {
@@ -194,6 +198,7 @@ def analyse_claim_events(
     user_history: Optional[Dict[str, Any]] = None,
     evidence_rules: Optional[Dict[str, Any]] = None,
     claim_id: Optional[str] = None,
+    image_index: Optional[ImageIndex] = None,
 ) -> Iterator[Dict[str, Any]]:
     """
     Analyse one claim, yielding a progress event per stage.
@@ -230,6 +235,30 @@ def analyse_claim_events(
             image_paths, base_dir=image_base_dir, max_images=max_images,
         )
     yield emit("preflight", "complete")
+
+    # ── duplicate check: deterministic, and it runs before the model ──
+    #
+    # Ordering is load-bearing: the query must see the index as it was *before* this claim,
+    # so querying and inserting cannot be the same step, and a self-match would otherwise
+    # accuse every claim of copying itself.
+    #
+    # A detected duplicate does **not** skip perception, though it would save a request.
+    # Two reasons. The audit trail still needs to say what was in the photograph — "we
+    # rejected this and never looked at it" is not an answer to give a claimant. And
+    # `R030_duplicate_image_reuse` sits below `R010_wrong_object` and `R003` in the rule
+    # order, all of which read perception; short-circuiting would make `R002_perception_
+    # unavailable` fire first and produce not_enough_information instead of the duplicate
+    # verdict.
+    yield emit("duplicate_check", "running")
+    index = image_index if image_index is not None else ImageIndex()
+    duplicate_matches: List[DuplicateMatch] = []
+    if usable and indexable(quality.overall):
+        image_ids = [image_id(i) for i in range(len(usable))]
+        duplicate_matches = index.find_duplicates(
+            usable, claim_id=cid, user_id=user_id, image_ids=image_ids,
+        )
+        index.add_claim_images(cid, user_id, usable, image_ids)
+    yield emit("duplicate_check", "complete")
 
     # ── perception: the one network call ──
     perception: Optional[ClaimPerception] = None
@@ -287,6 +316,8 @@ def analyse_claim_events(
         "no_usable_image": not validation.valid,
         "perception_failed": perception_failed,
         "user_history_risk": "user_history_risk" in (user_risk.risk_flags or []),
+        "duplicate_image_reuse": bool(duplicate_matches),
+        "duplicate_matches": duplicate_matches,
         "error": error,
     })
     yield emit("decision", "complete")
@@ -304,6 +335,7 @@ def analyse_claim_events(
             validation=validation,
             policy=policy,
             user_risk=user_risk,
+            duplicate_matches=duplicate_matches,
             llm_requests=llm_requests,
             error=error,
             timeline=timeline,

@@ -36,6 +36,8 @@ from agent_core.agents.perception import (  # noqa: E402
     PreparedClaim,
     run_batch_perception,
 )
+from agent_core.retrieval.image_index import DuplicateMatch, ImageIndex, indexable  # noqa: E402
+from agent_core.schemas.contract import image_id  # noqa: E402
 from agent_core.schemas.perception import ClaimPerception  # noqa: E402
 from agent_core.schemas.contract import OUTPUT_COLUMNS  # noqa: E402
 from agent_core.service import judge, to_output_row  # noqa: E402
@@ -74,7 +76,9 @@ def prepare_claims(
     rows: List[Dict[str, str]],
     image_root: Path,
     skip_ids: set[str],
-) -> tuple[List[PreparedClaim], List[Dict[str, Any]], Dict[str, PreflightQuality]]:
+    image_index: Optional[ImageIndex] = None,
+) -> tuple[List[PreparedClaim], List[Dict[str, Any]], Dict[str, PreflightQuality],
+           Dict[str, List[DuplicateMatch]]]:
     """
     Preflight every claim. Returns (claims worth sending, rows resolved without the model,
     measured image quality per claim id).
@@ -86,6 +90,7 @@ def prepare_claims(
     sendable: List[PreparedClaim] = []
     resolved: List[Dict[str, Any]] = []
     quality_by_id: Dict[str, PreflightQuality] = {}
+    duplicates_by_id: Dict[str, List[DuplicateMatch]] = {}
 
     for row in rows:
         claim_id = row.get("claim_id") or row.get("user_id", "")
@@ -97,11 +102,23 @@ def prepare_claims(
         )
         quality_by_id[claim_id] = quality
 
+        # Duplicate check before insert, and before any request, so a claim is compared
+        # only against what preceded it.
+        if image_index is not None and images and indexable(quality.overall):
+            ids = [image_id(i) for i in range(len(images))]
+            found = image_index.find_duplicates(
+                images, claim_id=claim_id, user_id=row.get("user_id", ""), image_ids=ids,
+            )
+            if found:
+                duplicates_by_id[claim_id] = found
+            image_index.add_claim_images(claim_id, row.get("user_id", ""), images, ids)
+
         if not validation.valid:
             resolved.append({
                 "claim_id": claim_id, "row": row, "perception": None,
                 "no_usable_image": True, "validation": validation,
                 "preflight_quality": quality,
+                "duplicate_matches": duplicates_by_id.get(claim_id, []),
             })
             continue
 
@@ -113,7 +130,7 @@ def prepare_claims(
             raw=row,
         ))
 
-    return sendable, resolved, quality_by_id
+    return sendable, resolved, quality_by_id, duplicates_by_id
 
 
 # ─── Runner ─────────────────────────────────────────────────────────────────
@@ -126,6 +143,7 @@ def run(
     store: CheckpointStore,
     resume: bool = True,
     dry_run: bool = False,
+    image_index: Optional[ImageIndex] = None,
 ) -> Dict[str, Any]:
     with claims_csv.open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -134,7 +152,9 @@ def run(
     if done:
         print(f"Resuming: {len(done)} claim(s) already complete, skipping them.")
 
-    sendable, resolved, quality_by_id = prepare_claims(rows, image_root, done)
+    sendable, resolved, quality_by_id, duplicates_by_id = prepare_claims(
+        rows, image_root, done, image_index=image_index,
+    )
     print(f"{len(rows)} claims: {len(sendable)} need perception, "
           f"{len(resolved)} resolved at preflight, {len(done)} already done.")
 
@@ -172,6 +192,7 @@ def run(
                     "claim_id": claim.claim_id, "row": claim.raw,
                     "perception": perceptions.get(claim.claim_id),
                     "preflight_quality": quality_by_id.get(claim.claim_id),
+                    "duplicate_matches": duplicates_by_id.get(claim.claim_id, []),
                     "batch_id": batch.batch_id, "model": model_config()["primary"],
                 })
         except DailyQuotaExhausted as e:
@@ -292,6 +313,11 @@ def main() -> int:
     p.add_argument("--no-resume", action="store_true", help="Ignore prior checkpoint state")
     p.add_argument("--fresh", action="store_true", help="Clear the checkpoint before running")
     p.add_argument("--dry-run", action="store_true", help="Plan batches without calling the API")
+    p.add_argument(
+        "--duplicate-detection", action="store_true",
+        help="Check each claim's images against the index (see the note below; OFF for the "
+             "synthetic benchmark on purpose)",
+    )
     args = p.parse_args()
 
     if not os.getenv("GEMINI_API_KEY") and not args.dry_run:
@@ -303,10 +329,23 @@ def main() -> int:
         store.clear()
         print("Checkpoint cleared.")
 
+    # Duplicate detection defaults OFF for this runner, which is a statement about the
+    # dataset rather than about the feature. Every car case in the synthetic set renders
+    # the same template at the same angle, differing only by a small damage mark, so two
+    # *different* claims produce genuinely near-identical images -- 110 of 1035 pairs match,
+    # some at 0 bits on both hashes. Enabling it here would measure the corpus, not the
+    # system, and would silently corrupt the accuracy figure. Real photographs behave
+    # entirely differently: 0 false positives. See docs/PHASE_4.4_REPORT.md and
+    # `python -m agent_core.evaluation.evaluate_duplicates`.
+    index = ImageIndex() if args.duplicate_detection else None
+    if index is not None:
+        print(f"Duplicate detection ON against {index.count()} indexed fingerprints.")
+
     run(
         claims_csv=Path(args.claims), image_root=Path(args.image_root),
         output_csv=Path(args.output), results_json=Path(args.results),
         store=store, resume=not args.no_resume, dry_run=args.dry_run,
+        image_index=index,
     )
     return 0
 

@@ -159,6 +159,9 @@ export function LiveInvestigationViewer({ stages, files, completedTime, claimRes
             <Node id="preflight" label="Preflight — Quality Gate" icon={ImageIcon} delay={0.1} />
 
             <div className="h-8 w-px bg-border/50" />
+            <Node id="duplicate_check" label="Duplicate Image Check" icon={Search} delay={0.15} />
+
+            <div className="h-8 w-px bg-border/50" />
 
             <div className="w-full relative border border-primary/40 rounded-xl p-6 bg-primary/5">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0a0a0c] px-3 text-[10px] font-mono text-primary border border-primary/40 rounded-full">

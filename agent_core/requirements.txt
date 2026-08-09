@@ -1,11 +1,17 @@
 pydantic>=2.9.0
-langgraph
 google-genai
+# langgraph removed in Phase 4.3: it orchestrated the ten-node graph, and the pipeline it
+# was holding together is now one LLM call followed by straight-line deterministic Python.
+# A graph framework with nothing to branch on is a dependency, not an architecture. The
+# measured finding that LangGraph 1.2.6 does run parallel edges concurrently still stands
+# (docs/ARCHITECTURE.md) and it can come back if a real fan-out ever returns.
 Pillow
 python-dotenv
 numpy
 # Headless build: the quality gate needs cv2.Laplacian, not a GUI toolkit.
 opencv-python-headless
+# Sparse arm of the hybrid retriever. Pure Python, no build step.
+rank_bm25
 PyYAML>=6.0
 
 # Test suite (hermetic — no live API calls)
