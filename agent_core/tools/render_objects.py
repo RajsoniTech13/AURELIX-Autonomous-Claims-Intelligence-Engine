@@ -301,8 +301,16 @@ def degrade(img: Image.Image, mode: str, rng: random.Random) -> Image.Image:
         w, h = img.size
         return img.crop((int(w * 0.62), int(h * 0.58), w, h)).resize((w, h), Image.LANCZOS)
     if mode == "low_res":
+        # Downsample with BOX (area-average, what a small sensor actually does), then
+        # restore with BICUBIC (what every phone, browser and upload pipeline actually
+        # does). The previous version used NEAREST in both directions, which produced
+        # hard 11px blocks -- and blocky edges read as *sharp* to any frequency-domain
+        # measure. Measured on this renderer: NEAREST upscaling gives a Laplacian variance
+        # of 144.6 where the undegraded image gives 505.4, so the "low resolution" case was
+        # scoring as a perfectly focused photograph. BICUBIC gives 1.1, which is what an
+        # upscaled thumbnail genuinely looks like.
         w, h = img.size
-        return img.resize((w // 11, h // 11), Image.NEAREST).resize((w, h), Image.NEAREST)
+        return img.resize((w // 11, h // 11), Image.BOX).resize((w, h), Image.BICUBIC)
     if mode == "obstructed":
         out = img.copy()
         d = ImageDraw.Draw(out)
