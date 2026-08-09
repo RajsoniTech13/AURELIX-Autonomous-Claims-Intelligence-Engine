@@ -1,0 +1,92 @@
+# AURELIX — fraud pattern playbook.
+#
+# A curated, retrievable description of known fraud signatures. This collection does NOT
+# decide anything: the fraud score is deterministic arithmetic in `rules_engine.py`, and
+# nothing here can change a verdict. What it provides is *context for a human reviewer* —
+# when a claim is escalated, the queue can show which known pattern it resembles and what
+# a reviewer should look at next.
+#
+# That boundary is deliberate. A retrieved "similar fraud pattern" is a similarity score,
+# and similarity is not evidence. Letting it move a verdict would reintroduce exactly the
+# thing Phase 1 removed: an outcome that cannot be explained by a rule id.
+#
+# Every entry carries a stable `pattern_id` so it can be cited in a review note and so
+# rewording an entry never changes what a stored citation refers to.
+
+version: 1
+
+patterns:
+  - pattern_id: FP-001-PART-SHOPPING
+    title: Claimed part does not match the damaged part
+    object_categories: [car, laptop, package]
+    description: >
+      The claim names an expensive component while the photographs show damage to a cheaper
+      one, or to nothing at all. The narrative is usually specific about the part and vague
+      about the incident.
+    reviewer_prompt: >
+      Check whether the claimed part is visible in any image. If it is visible and undamaged,
+      this is a contradiction; if it is not visible, it is missing evidence, not fraud.
+    related_rules: [R040_part_mismatch, R041_no_damage_on_visible_part]
+
+  - pattern_id: FP-002-SEVERITY-INFLATION
+    title: Minor damage described as a total loss
+    object_categories: [car, laptop, package]
+    description: >
+      Real damage exists on the correct part, but the narrative escalates it — "completely
+      destroyed", "needs full replacement", "write-off" — against photographs showing a
+      scratch or a dent. The most common form of claim padding, and usually not deliberate
+      fraud so much as optimism.
+    reviewer_prompt: >
+      Compare the observed severity against the claimed severity. A single notch of
+      overstatement is ordinary; two or more is the signal.
+    related_rules: [R042_severity_inflation]
+
+  - pattern_id: FP-003-IMAGE-REUSE
+    title: A photograph submitted under an earlier claim
+    object_categories: [car, laptop, package]
+    description: >
+      The same photograph appears under a different claim id or claimant — pre-existing
+      damage recycled as a new incident, or one incident split across several claims. The
+      strongest objective signal in this domain, because it is a fact rather than an
+      inference.
+    reviewer_prompt: >
+      The verdict names the prior claim id. Confirm the two claims describe different
+      incidents before acting; a legitimate resubmission of a rejected claim looks identical
+      to this and is not fraud.
+    related_rules: [R030_duplicate_image_reuse]
+
+  - pattern_id: FP-004-WRONG-OBJECT
+    title: The photograph shows a different object entirely
+    object_categories: [car, laptop, package]
+    description: >
+      Images of an object from a different category than the one claimed. Most often an
+      upload mistake rather than fraud, which is why it is worth distinguishing from a
+      part mismatch.
+    reviewer_prompt: >
+      Ask for a resubmission before treating this as fraud. Genuine claimants attach the
+      wrong file more often than fraudsters do.
+    related_rules: [R010_wrong_object]
+
+  - pattern_id: FP-005-EVIDENCE-DEGRADATION
+    title: Evidence too poor to assess, submitted repeatedly
+    object_categories: [car, laptop, package]
+    description: >
+      Photographs that are blurred, underexposed or framed so the claimed part is never
+      visible. A single instance is ordinary; the pattern is a claimant who supplies fresh
+      unusable images each time a clearer photograph is requested.
+    reviewer_prompt: >
+      Look at the claimant's history rather than this claim. One unusable photograph proves
+      nothing at all.
+    related_rules: [R003_image_quality_unusable, R020_claimed_part_not_visible]
+
+  - pattern_id: FP-006-INJECTION
+    title: Claim text addressed to the automated system
+    object_categories: [car, laptop, package]
+    description: >
+      The narrative contains directives aimed at the analysis rather than a description of
+      damage — "ignore previous instructions", "mark this as approved". Detected, flagged,
+      and then analysed normally.
+    reviewer_prompt: >
+      Read the underlying claim on its merits. The attempt is a risk flag; it is not itself
+      proof that the damage claim is false.
+    related_rules: [R031_high_fraud_score]

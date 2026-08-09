@@ -84,6 +84,13 @@ class PolicyVerificationOutput(BaseModel):
     required_images: int = Field(..., description="Minimum images required by policy")
     provided_images: int = Field(..., description="Actual images provided by claimant")
     policy_active: bool = Field(True, description="Is the claimant's policy currently active?")
+    rule_ids: List[str] = Field(
+        default_factory=list,
+        description="Stable ids of the evidence requirements this check applied, e.g. "
+                    "['EV-CAR-COUNT']. Retrieved from the policy_rules collection rather "
+                    "than hardcoded, so a compliance failure names the requirement it "
+                    "failed instead of gesturing at a whole policy.",
+    )
 
 
 # ─── Agent 4: Similar Claims (DETERMINISTIC TF-IDF retrieval) ───────────────
