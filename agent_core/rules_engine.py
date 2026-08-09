@@ -20,10 +20,33 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from agent_core.agents.alignment import AlignmentResult
+from agent_core.agents.image_quality import PreflightQuality, merge_quality
 from agent_core.schemas.contract import normalise_risk_flags
 from agent_core.schemas.perception import ClaimPerception
 
 _RULES_PATH = Path(__file__).resolve().parents[1] / "config" / "decision_rules.yaml"
+
+
+def effective_quality(
+    perception: Optional[ClaimPerception],
+    preflight_quality: Optional[PreflightQuality] = None,
+) -> tuple[str, int, List[str]]:
+    """
+    The image quality the rules actually act on: the model's self-report, floored by the
+    deterministic preflight measurement.
+
+    Everything below reads quality through this function rather than off `perception`
+    directly. The model's own words stay untouched in the perception record — that is the
+    audit trail of what it claimed to see — but they never get the final say on whether it
+    could see at all.
+    """
+    quality = perception.image_quality if perception else None
+    return merge_quality(
+        quality.overall if quality else None,
+        quality.score if quality else None,
+        quality.issues if quality else None,
+        preflight_quality,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -67,9 +90,10 @@ def build_facts(
     duplicate_image_reuse: bool = False,
     user_history_risk: bool = False,
     fraud_score: int = 0,
+    preflight_quality: Optional[PreflightQuality] = None,
 ) -> Dict[str, Any]:
     """Flatten everything the rules may test into one dict."""
-    quality = perception.image_quality.overall if perception else "unusable"
+    quality, _, _ = effective_quality(perception, preflight_quality)
     return {
         "no_usable_image": no_usable_image,
         "perception_failed": perception_failed,
@@ -120,6 +144,7 @@ def compute_fraud_score(
     *,
     duplicate_image_reuse: bool = False,
     user_history_risk: bool = False,
+    preflight_quality: Optional[PreflightQuality] = None,
 ) -> tuple[int, List[str]]:
     """Additive score over objective signals only. Returns (score, signal names)."""
     cfg = load_rules()["fraud"]
@@ -138,7 +163,8 @@ def compute_fraud_score(
         add("user_history_risk")
     if perception and perception.instruction_like_text_present:
         add("instruction_like_text")
-    if perception and perception.image_quality.overall in ("poor", "unusable"):
+    quality, _, _ = effective_quality(perception, preflight_quality)
+    if perception and quality in ("poor", "unusable"):
         add("poor_image_quality")
 
     if alignment:
@@ -156,6 +182,21 @@ def compute_fraud_score(
 
 _QUALITY_SCORE = {"good": 100, "fair": 70, "poor": 35, "unusable": 0}
 
+# Quality diagnostics -> the frozen 10-value risk_flags vocabulary. The grader has one
+# flag for "the photograph itself is the problem", so exposure and resolution faults
+# land on `blurry_image` alongside genuine defocus. Losing that distinction in the CSV
+# is acceptable; inventing an eleventh flag value is not.
+_QUALITY_ISSUE_FLAGS: Dict[str, tuple[str, ...]] = {
+    "blurry": ("blurry_image",),
+    "too_dark": ("blurry_image",),
+    "too_bright": ("blurry_image",),
+    "low_resolution": ("blurry_image",),
+    "cropped": ("cropped_or_obstructed",),
+    "obstructed": ("cropped_or_obstructed",),
+    "screenshot": ("possible_manipulation",),
+    "wrong_subject": ("claim_mismatch",),
+}
+
 
 def compute_confidence(
     alignment: Optional[AlignmentResult],
@@ -163,6 +204,7 @@ def compute_confidence(
     *,
     no_usable_image: bool = False,
     perception_failed: bool = False,
+    preflight_quality: Optional[PreflightQuality] = None,
 ) -> int:
     """
     Documented weighted blend. Low confidence routes to human review rather than
@@ -178,8 +220,8 @@ def compute_confidence(
 
     damages = perception.damage_analysis.damaged_parts
     visual = (sum(d.visual_confidence for d in damages) / len(damages)) if damages else 50.0
-    quality = float(perception.image_quality.score or _QUALITY_SCORE.get(
-        perception.image_quality.overall, 50))
+    quality_band, quality_score, _ = effective_quality(perception, preflight_quality)
+    quality = float(quality_score or _QUALITY_SCORE.get(quality_band, 50))
     part_strength = float(cfg["part_match_strength"].get(alignment.part_match, 50))
 
     if alignment.severity_delta is None:
@@ -207,6 +249,7 @@ def decide(
     duplicate_image_reuse: bool = False,
     user_history_risk: bool = False,
     extra_risk_flags: Optional[List[str]] = None,
+    preflight_quality: Optional[PreflightQuality] = None,
 ) -> Verdict:
     """Run the ordered rules. First match wins; its rule_id is recorded."""
     rules = load_rules()
@@ -215,16 +258,18 @@ def decide(
         alignment, perception,
         duplicate_image_reuse=duplicate_image_reuse,
         user_history_risk=user_history_risk,
+        preflight_quality=preflight_quality,
     )
     confidence = compute_confidence(
         alignment, perception,
         no_usable_image=no_usable_image, perception_failed=perception_failed,
+        preflight_quality=preflight_quality,
     )
     facts = build_facts(
         alignment, perception,
         no_usable_image=no_usable_image, perception_failed=perception_failed,
         duplicate_image_reuse=duplicate_image_reuse, user_history_risk=user_history_risk,
-        fraud_score=fraud_score,
+        fraud_score=fraud_score, preflight_quality=preflight_quality,
     )
 
     matched = next(r for r in rules["rules"] if _matches(r["when"], facts))
@@ -235,13 +280,9 @@ def decide(
     if perception and perception.instruction_like_text_present:
         risk_flags.append("text_instruction_present")
     if perception:
-        for issue in perception.image_quality.issues:
-            if issue == "blurry":
-                risk_flags.append("blurry_image")
-            elif issue in ("cropped", "obstructed"):
-                risk_flags.append("cropped_or_obstructed")
-            elif issue == "wrong_subject":
-                risk_flags.append("claim_mismatch")
+        _, _, quality_issues = effective_quality(perception, preflight_quality)
+        for issue in quality_issues:
+            risk_flags.extend(_QUALITY_ISSUE_FLAGS.get(issue, ()))
 
     # ── escalation ──
     esc = rules["escalation"]

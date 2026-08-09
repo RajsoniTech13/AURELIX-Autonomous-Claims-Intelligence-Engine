@@ -29,13 +29,14 @@ load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from agent_core.agents.alignment import compute_alignment  # noqa: E402
-from agent_core.agents.image_validator import load_valid_images, run_image_validator  # noqa: E402
+from agent_core.agents.image_quality import UNMEASURED, PreflightQuality  # noqa: E402
+from agent_core.agents.image_validator import preflight  # noqa: E402
 from agent_core.agents.perception import (  # noqa: E402
     BatchIsolationError,
     PreparedClaim,
     run_batch_perception,
 )
-from agent_core.rules_engine import decide  # noqa: E402
+from agent_core.rules_engine import decide, effective_quality  # noqa: E402
 from agent_core.schemas.perception import ClaimPerception  # noqa: E402
 from agent_core.schemas.contract import OUTPUT_COLUMNS, coerce_to_vocabulary, join_multi, to_bool_str  # noqa: E402
 from agent_core.schemas.contract import ISSUE_TYPE_VALUES, OBJECT_PART_VALUES, SEVERITY_VALUES  # noqa: E402
@@ -54,13 +55,30 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # ─── Loading ────────────────────────────────────────────────────────────────
 
+def measure_claim_quality(row: Dict[str, str], image_root: Path) -> PreflightQuality:
+    """
+    Deterministic blur/exposure measurement for one claim's images.
+
+    Kept as a standalone function because it is needed twice: once in preflight for claims
+    about to be sent, and again when re-deriving verdicts for claims perceived on an earlier
+    run. Measuring from the files both times costs nothing and keeps the two paths honest —
+    a stored measurement could silently drift from the image it describes.
+    """
+    _, _, quality = preflight(
+        row.get("image_paths", ""), base_dir=str(image_root),
+        max_images=batching_config()["max_images_per_claim"],
+    )
+    return quality
+
+
 def prepare_claims(
     rows: List[Dict[str, str]],
     image_root: Path,
     skip_ids: set[str],
-) -> tuple[List[PreparedClaim], List[Dict[str, Any]]]:
+) -> tuple[List[PreparedClaim], List[Dict[str, Any]], Dict[str, PreflightQuality]]:
     """
-    Preflight every claim. Returns (claims worth sending, rows resolved without the model).
+    Preflight every claim. Returns (claims worth sending, rows resolved without the model,
+    measured image quality per claim id).
 
     Claims with no usable image never reach Gemini: they cannot produce a grounded finding,
     so spending a slot of a 20-request budget on them would be waste.
@@ -68,25 +86,26 @@ def prepare_claims(
     max_images = batching_config()["max_images_per_claim"]
     sendable: List[PreparedClaim] = []
     resolved: List[Dict[str, Any]] = []
+    quality_by_id: Dict[str, PreflightQuality] = {}
 
     for row in rows:
         claim_id = row.get("claim_id") or row.get("user_id", "")
         if claim_id in skip_ids:
             continue
 
-        validation = run_image_validator(
-            images=None, image_paths_str=row.get("image_paths", ""), base_dir=str(image_root),
+        validation, images, quality = preflight(
+            row.get("image_paths", ""), base_dir=str(image_root), max_images=max_images,
         )
+        quality_by_id[claim_id] = quality
+
         if not validation.valid:
             resolved.append({
                 "claim_id": claim_id, "row": row, "perception": None,
                 "no_usable_image": True, "validation": validation,
+                "preflight_quality": quality,
             })
             continue
 
-        images = load_valid_images(
-            row.get("image_paths", ""), base_dir=str(image_root), max_images=max_images,
-        )
         sendable.append(PreparedClaim(
             claim_id=claim_id,
             claim_object=row.get("claim_object", ""),
@@ -95,7 +114,7 @@ def prepare_claims(
             raw=row,
         ))
 
-    return sendable, resolved
+    return sendable, resolved, quality_by_id
 
 
 # ─── Judgement (pure Python) ────────────────────────────────────────────────
@@ -104,6 +123,7 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
     """Alignment + rules for one claim. No LLM, fully reproducible."""
     perception = entry.get("perception")
     row = entry["row"]
+    quality = entry.get("preflight_quality") or UNMEASURED
 
     alignment = compute_alignment(perception, row.get("claim_object", "")) if perception else None
 
@@ -112,12 +132,14 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
         no_usable_image=entry.get("no_usable_image", False),
         perception_failed=entry.get("perception_failed", False),
         extra_risk_flags=list(getattr(entry.get("validation"), "risk_flags", []) or []),
+        preflight_quality=quality,
     )
 
     return {
         "claim_id": entry["claim_id"],
         "row": row,
         "perception": perception,
+        "preflight_quality": quality,
         "alignment": alignment,
         "verdict": verdict,
         "batch_id": entry.get("batch_id"),
@@ -147,12 +169,19 @@ def to_output_row(result: Dict[str, Any]) -> Dict[str, str]:
             issue_type, severity = "none", "none"
         supporting = [s for s in perception.supporting_image_ids if s.startswith("img_")]
 
-    evidence_met = bool(perception and perception.image_quality.overall in ("good", "fair"))
-    evidence_reason = (
-        f"Image quality assessed {perception.image_quality.overall} "
-        f"(score {perception.image_quality.score})."
-        if perception else "No usable image evidence was submitted with this claim."
-    )
+    # Quality here is the gated value, not the model's self-report: the CSV must agree with
+    # the verdict, and the verdict was reached on the measured figure.
+    band, score, _ = effective_quality(perception, result.get("preflight_quality"))
+    evidence_met = bool(perception and band in ("good", "fair"))
+    if not perception:
+        evidence_reason = "No usable image evidence was submitted with this claim."
+    elif band != perception.image_quality.overall:
+        evidence_reason = (
+            f"Image quality measured {band} (score {score}) by deterministic preflight, "
+            f"overriding the model's assessment of {perception.image_quality.overall}."
+        )
+    else:
+        evidence_reason = f"Image quality assessed {band} (score {score})."
 
     return {
         "user_id": row.get("user_id", ""),
@@ -190,7 +219,7 @@ def run(
     if done:
         print(f"Resuming: {len(done)} claim(s) already complete, skipping them.")
 
-    sendable, resolved = prepare_claims(rows, image_root, done)
+    sendable, resolved, quality_by_id = prepare_claims(rows, image_root, done)
     print(f"{len(rows)} claims: {len(sendable)} need perception, "
           f"{len(resolved)} resolved at preflight, {len(done)} already done.")
 
@@ -227,6 +256,7 @@ def run(
                 entries.append({
                     "claim_id": claim.claim_id, "row": claim.raw,
                     "perception": perceptions.get(claim.claim_id),
+                    "preflight_quality": quality_by_id.get(claim.claim_id),
                     "batch_id": batch.batch_id, "model": model_config()["primary"],
                 })
         except DailyQuotaExhausted as e:
@@ -297,6 +327,9 @@ def run(
             "verdict": r["verdict"].to_dict(),
             "alignment": r["alignment"].to_dict() if r["alignment"] else None,
             "perception": r["perception"].model_dump() if r["perception"] else None,
+            # Kept beside the model's own quality claim rather than replacing it, so a
+            # reviewer can see both what the model said and what the pixels said.
+            "preflight_quality": r["preflight_quality"].to_dict() if r.get("preflight_quality") else None,
             "error": r["error"],
         }
 
@@ -311,8 +344,10 @@ def run(
         if cid in detail_by_id or not rec.get("raw_perception"):
             continue
         perception = ClaimPerception.model_validate(json.loads(rec["raw_perception"]))
+        row = row_by_id.get(cid, {})
         replayed = judge({
-            "claim_id": cid, "row": row_by_id.get(cid, {}), "perception": perception,
+            "claim_id": cid, "row": row, "perception": perception,
+            "preflight_quality": quality_by_id.get(cid) or measure_claim_quality(row, image_root),
             "batch_id": rec.get("batch_id"), "model": rec.get("model"),
         })
         detail_by_id[cid] = _detail(replayed)

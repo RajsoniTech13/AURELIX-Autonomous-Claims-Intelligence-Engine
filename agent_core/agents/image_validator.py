@@ -19,6 +19,7 @@ from typing import List, Optional, Sequence
 
 from PIL import Image
 
+from agent_core.agents.image_quality import UNMEASURED, PreflightQuality, assess_images
 from agent_core.schemas.contract import image_id
 from agent_core.schemas.models import ImageValidatorOutput
 
@@ -169,3 +170,32 @@ def load_valid_images(
         except Exception:  # noqa: BLE001
             continue
     return loaded
+
+
+def preflight(
+    image_paths_str: str,
+    base_dir: Optional[str] = None,
+    max_images: int = 6,
+) -> tuple[ImageValidatorOutput, List[Image.Image], PreflightQuality]:
+    """
+    The single preflight entry point: validate, load, and measure — all before any LLM call.
+
+    Returns `(validation, images, quality)`. `quality` is the deterministic blur/exposure
+    measurement that later overrides whatever the model says about its own evidence; see
+    `agents/image_quality.py`.
+
+    Note what this deliberately does *not* do: an `unusable` measurement does not set
+    `validation.valid = False`, so a dark or blurred claim still reaches the model. That
+    would save quota, but `R010_wrong_object` sits above `R003_image_quality_unusable` in
+    the rule order precisely because "this photo shows a cat" is a finding worth having
+    even when the photo is badly exposed — and only the model can tell us that.
+    """
+    validation = run_image_validator(
+        images=None, image_paths_str=image_paths_str, base_dir=base_dir,
+    )
+    if not validation.valid:
+        return validation, [], UNMEASURED
+
+    images = load_valid_images(image_paths_str, base_dir=base_dir, max_images=max_images)
+    quality = assess_images(images, [image_id(i) for i in range(len(images))])
+    return validation, images, quality

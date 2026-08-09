@@ -4,6 +4,8 @@ google-genai
 Pillow
 python-dotenv
 numpy
+# Headless build: the quality gate needs cv2.Laplacian, not a GUI toolkit.
+opencv-python-headless
 PyYAML>=6.0
 
 # Test suite (hermetic — no live API calls)
