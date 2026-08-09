@@ -68,6 +68,36 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 517.03,
+     "mean_luminance": 175.73,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    },
+    {
+     "image_id": "img_2",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 500.09,
+     "mean_luminance": 177.2,
+     "p05_luminance": 41.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -137,6 +167,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 341.47,
+     "mean_luminance": 178.74,
+     "p05_luminance": 91.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -209,6 +258,36 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 474.77,
+     "mean_luminance": 188.1,
+     "p05_luminance": 65.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    },
+    {
+     "image_id": "img_2",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 591.91,
+     "mean_luminance": 196.92,
+     "p05_luminance": 65.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -279,6 +358,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 501.43,
+     "mean_luminance": 177.01,
+     "p05_luminance": 41.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -348,6 +446,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 602.95,
+     "mean_luminance": 175.09,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -429,6 +546,36 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 526.31,
+     "mean_luminance": 199.05,
+     "p05_luminance": 142.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    },
+    {
+     "image_id": "img_2",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 551.91,
+     "mean_luminance": 176.68,
+     "p05_luminance": 41.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -505,6 +652,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 344.7,
+     "mean_luminance": 189.17,
+     "p05_luminance": 117.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -578,6 +744,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 1252.46,
+     "mean_luminance": 139.08,
+     "p05_luminance": 23.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -648,6 +833,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 532.86,
+     "mean_luminance": 137.83,
+     "p05_luminance": 27.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -730,6 +934,36 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 505.38,
+     "mean_luminance": 148.88,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    },
+    {
+     "image_id": "img_2",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 630.51,
+     "mean_luminance": 138.07,
+     "p05_luminance": 29.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -799,6 +1033,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 519.29,
+     "mean_luminance": 137.76,
+     "p05_luminance": 27.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -871,6 +1124,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 303.71,
+     "mean_luminance": 202.77,
+     "p05_luminance": 155.0,
+     "p95_luminance": 215.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -945,6 +1217,36 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 320.37,
+     "mean_luminance": 201.15,
+     "p05_luminance": 155.0,
+     "p95_luminance": 214.0,
+     "band": "good",
+     "issues": []
+    },
+    {
+     "image_id": "img_2",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 324.84,
+     "mean_luminance": 200.22,
+     "p05_luminance": 155.0,
+     "p95_luminance": 214.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1023,6 +1325,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 311.58,
+     "mean_luminance": 198.82,
+     "p05_luminance": 140.0,
+     "p95_luminance": 215.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1092,6 +1413,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 618.15,
+     "mean_luminance": 173.94,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1168,6 +1508,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 537.55,
+     "mean_luminance": 175.74,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1243,6 +1602,25 @@
     "Outer lid panel cannot be evaluated because only the front/open display is shown."
    ],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 818.18,
+     "mean_luminance": 138.26,
+     "p05_luminance": 25.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1324,6 +1702,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 547.68,
+     "mean_luminance": 174.05,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1401,6 +1798,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 396.6,
+     "mean_luminance": 189.51,
+     "p05_luminance": 118.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1480,6 +1896,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 579.93,
+     "mean_luminance": 198.94,
+     "p05_luminance": 143.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1499,7 +1934,7 @@
    ],
    "justification": "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted. The claimed part (front_bumper) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R020_claimed_part_not_visible]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 60 below 70"
+   "escalation_reason": "confidence 60 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -1559,6 +1994,25 @@
     "Condition of front bumper cannot be determined from rear photo"
    ],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 451.95,
+     "mean_luminance": 188.95,
+     "p05_luminance": 90.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1638,6 +2092,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 525.04,
+     "mean_luminance": 148.95,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1715,6 +2188,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 1669.19,
+     "mean_luminance": 166.13,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1794,6 +2286,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 304.67,
+     "mean_luminance": 202.74,
+     "p05_luminance": 155.0,
+     "p95_luminance": 215.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -1867,6 +2378,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 530.11,
+     "mean_luminance": 199.37,
+     "p05_luminance": 144.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -1942,6 +2472,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 643.74,
+     "mean_luminance": 164.07,
+     "p05_luminance": 32.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2016,6 +2565,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 1207.02,
+     "mean_luminance": 165.22,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2084,6 +2652,25 @@
     "Lower portion of the box is obscured by a foreground element."
    ],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 541.9,
+     "mean_luminance": 197.07,
+     "p05_luminance": 119.0,
+     "p95_luminance": 214.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -2155,6 +2742,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 385.22,
+     "mean_luminance": 189.15,
+     "p05_luminance": 117.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2225,6 +2831,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 547.04,
+     "mean_luminance": 199.05,
+     "p05_luminance": 143.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2245,7 +2870,7 @@
    ],
    "justification": "The submitted images are not of sufficient quality to assess the claimed damage. The claimed part (front_bumper) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R003_image_quality_unusable]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 28 below 70"
+   "escalation_reason": "confidence 28 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -2295,27 +2920,51 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "unusable",
+   "score": 10,
+   "issues": [
+    "blurry"
+   ],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 0.56,
+     "mean_luminance": 189.61,
+     "p05_luminance": 115.0,
+     "p95_luminance": 218.0,
+     "band": "unusable",
+     "issues": [
+      "blurry"
+     ]
+    }
+   ]
+  },
   "error": null
  },
  {
   "claim_id": "SYN-032",
   "batch_id": "batch_011",
   "verdict": {
-   "claim_status": "contradicted",
-   "confidence": 55,
+   "claim_status": "not_enough_information",
+   "confidence": 49,
    "fraud_score": 35,
    "rule_ids": [
-    "R040_part_mismatch",
+    "R003_image_quality_unusable",
     "FRAUD:poor_image_quality",
     "FRAUD:part_mismatch_with_damage_elsewhere"
    ],
    "risk_flags": [
-    "claim_mismatch",
+    "blurry_image",
+    "damage_not_visible",
     "manual_review_required"
    ],
-   "justification": "Damage was observed, but on a different part from the one claimed. Claimed door but damage was observed on windshield. Severity could not be compared (one side is unknown). Evidence: img_1. [R040_part_mismatch]",
+   "justification": "The submitted images are not of sufficient quality to assess the claimed damage. Claimed door but damage was observed on windshield. Severity could not be compared (one side is unknown). Evidence: img_1. [R003_image_quality_unusable]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 55 below 70; verdict 'contradicted' always requires review"
+   "escalation_reason": "confidence 49 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "mismatch",
@@ -2376,22 +3025,50 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "unusable",
+   "score": 10,
+   "issues": [
+    "too_dark"
+   ],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 20.08,
+     "mean_luminance": 40.58,
+     "p05_luminance": 15.0,
+     "p95_luminance": 47.0,
+     "band": "unusable",
+     "issues": [
+      "too_dark"
+     ]
+    }
+   ]
+  },
   "error": null
  },
  {
   "claim_id": "SYN-033",
-  "batch_id": "batch_011",
+  "batch_id": "batch_001",
   "verdict": {
-   "claim_status": "supported",
-   "confidence": 76,
-   "fraud_score": 10,
+   "claim_status": "not_enough_information",
+   "confidence": 62,
+   "fraud_score": 15,
    "rule_ids": [
-    "R052_supported"
+    "R003_image_quality_unusable",
+    "FRAUD:poor_image_quality"
    ],
-   "risk_flags": [],
-   "justification": "The submitted images confirm the claimed damage on the claimed part. Severity could not be compared (one side is unknown). Evidence: img_1. [R052_supported]",
-   "manual_review_required": false,
-   "escalation_reason": null
+   "risk_flags": [
+    "blurry_image",
+    "damage_not_visible",
+    "manual_review_required"
+   ],
+   "justification": "The submitted images are not of sufficient quality to assess the claimed damage. Severity could not be compared (one side is unknown). Evidence: img_1. [R003_image_quality_unusable]",
+   "manual_review_required": true,
+   "escalation_reason": "confidence 62 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "exact",
@@ -2414,10 +3091,10 @@
    "claim_id": "SYN-033",
    "observed_object": "laptop",
    "image_quality": {
-    "overall": "fair",
-    "score": 70,
+    "overall": "good",
+    "score": 85,
     "issues": [
-     "low_resolution"
+     "none"
     ]
    },
    "claim_understanding": {
@@ -2434,7 +3111,7 @@
       "issue_type": "crack",
       "severity": "medium",
       "image_id": "img_1",
-      "visual_confidence": 90
+      "visual_confidence": 95
      }
     ]
    },
@@ -2443,12 +3120,33 @@
     "img_1"
    ],
    "evidence": [
-    "Cracked impact pattern visible across the pixelated laptop screen."
+    "A spiderweb-pattern crack is clearly visible on the screen display of the laptop in image img_1."
    ],
-   "uncertainties": [
-    "Pixel art rendering style reduces fine structural detail visibility."
-   ],
+   "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "unusable",
+   "score": 10,
+   "issues": [
+    "blurry"
+   ],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 1.43,
+     "mean_luminance": 139.1,
+     "p05_luminance": 29.0,
+     "p95_luminance": 226.0,
+     "band": "unusable",
+     "issues": [
+      "blurry"
+     ]
+    }
+   ]
   },
   "error": null
  },
@@ -2471,7 +3169,7 @@
    ],
    "justification": "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted. The claimed part (seal) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R020_claimed_part_not_visible]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 34 below 70"
+   "escalation_reason": "confidence 34 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -2521,6 +3219,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 227.36,
+     "mean_luminance": 133.1,
+     "p05_luminance": 38.0,
+     "p95_luminance": 214.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2542,7 +3259,7 @@
    ],
    "justification": "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted. The claimed part (rear_bumper) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R020_claimed_part_not_visible]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 35 below 70"
+   "escalation_reason": "confidence 35 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -2592,6 +3309,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 22.67,
+     "mean_luminance": 181.07,
+     "p05_luminance": 38.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2613,7 +3349,7 @@
    ],
    "justification": "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted. The claimed part (trunk) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R020_claimed_part_not_visible]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 35 below 70"
+   "escalation_reason": "confidence 35 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -2663,6 +3399,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 19.79,
+     "mean_luminance": 146.42,
+     "p05_luminance": 38.0,
+     "p95_luminance": 186.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2683,7 +3438,7 @@
    ],
    "justification": "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted. The claimed part (port) is not visible in any submitted image. Severity could not be compared (one side is unknown). Evidence: img_1. [R020_claimed_part_not_visible]",
    "manual_review_required": true,
-   "escalation_reason": "confidence 41 below 70"
+   "escalation_reason": "confidence 41 below 70; verdict 'not_enough_information' always requires review"
   },
   "alignment": {
    "part_match": "not_visible",
@@ -2733,6 +3488,25 @@
     "Cannot inspect port condition because it is not captured in the image."
    ],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 41.19,
+     "mean_luminance": 170.93,
+     "p05_luminance": 46.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -2806,6 +3580,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 221.51,
+     "mean_luminance": 167.22,
+     "p05_luminance": 83.0,
+     "p95_luminance": 203.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -2877,6 +3670,25 @@
     "No laptop or screen is shown in the image."
    ],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 104.33,
+     "mean_luminance": 187.78,
+     "p05_luminance": 135.0,
+     "p95_luminance": 224.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -2950,6 +3762,25 @@
    ],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 708.69,
+     "mean_luminance": 194.21,
+     "p05_luminance": 170.0,
+     "p95_luminance": 250.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -3017,6 +3848,25 @@
    "uncertainties": [],
    "instruction_like_text_present": false
   },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 423.32,
+     "mean_luminance": 175.33,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
+  },
   "error": null
  },
  {
@@ -3083,6 +3933,25 @@
    ],
    "uncertainties": [],
    "instruction_like_text_present": false
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 438.81,
+     "mean_luminance": 148.61,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -3159,6 +4028,25 @@
     "Evidence is an illustration rather than a photograph."
    ],
    "instruction_like_text_present": true
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 523.0,
+     "mean_luminance": 175.78,
+     "p05_luminance": 38.0,
+     "p95_luminance": 218.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  },
@@ -3240,6 +4128,25 @@
     "Evidence is an illustration rather than a photograph."
    ],
    "instruction_like_text_present": true
+  },
+  "preflight_quality": {
+   "overall": "good",
+   "score": 90,
+   "issues": [],
+   "measured": true,
+   "per_image": [
+    {
+     "image_id": "img_1",
+     "width": 900,
+     "height": 620,
+     "blur_variance": 531.8,
+     "mean_luminance": 148.96,
+     "p05_luminance": 30.0,
+     "p95_luminance": 226.0,
+     "band": "good",
+     "issues": []
+    }
+   ]
   },
   "error": null
  }

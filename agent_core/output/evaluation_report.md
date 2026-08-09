@@ -14,9 +14,9 @@
 | metric | value |
 | :--- | ---: |
 | Cases scored | 44 / 44 |
-| **Accuracy** | **88.6%** |
-| Macro F1 | 86.0% |
-| Weighted F1 | 88.5% |
+| **Accuracy** | **93.2%** |
+| Macro F1 | 93.2% |
+| Weighted F1 | 93.2% |
 | Mean confidence | 70 |
 | Mean fraud score | 20 |
 
@@ -24,9 +24,9 @@
 
 | class | support | TP | FP | FN | precision | recall | F1 |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| supported | 19 | 18 | 2 | 1 | 90.0% | 94.7% | 92.3% |
-| contradicted | 18 | 16 | 2 | 2 | 88.9% | 88.9% | 88.9% |
-| not_enough_information | 7 | 5 | 1 | 2 | 83.3% | 71.4% | 76.9% |
+| supported | 19 | 18 | 1 | 1 | 94.7% | 94.7% | 94.7% |
+| contradicted | 18 | 16 | 1 | 2 | 94.1% | 88.9% | 91.4% |
+| not_enough_information | 7 | 7 | 1 | 0 | 87.5% | 100.0% | 93.3% |
 
 ## Confusion matrix
 
@@ -36,7 +36,7 @@ Rows are ground truth, columns are predictions.
 | :--- | ---: | ---: | ---: |
 | **supported** | 18 | 1 | 0 |
 | **contradicted** | 1 | 16 | 1 |
-| **not_enough_information** | 1 | 1 | 5 |
+| **not_enough_information** | 0 | 0 | 7 |
 
 ## By failure category
 
@@ -51,7 +51,7 @@ The number that matters: aggregate accuracy hides which specific failure mode is
 | no_damage | 2 | 2 | 100% |
 | part_mismatch | 6 | 7 | 86% |
 | part_not_visible | 3 | 3 | 100% |
-| poor_image | 2 | 4 | 50% |
+| poor_image | 4 | 4 | 100% |
 | severity_inflation | 4 | 5 | 80% |
 | severity_overstatement | 1 | 1 | 100% |
 | wrong_object | 2 | 2 | 100% |
@@ -64,6 +64,4 @@ The number that matters: aggregate accuracy hides which specific failure mode is
 | SYN-014 | match | supported | contradicted | mismatch | match | None | quarter_panel | R040_part_mismatch,FRAUD:part_mismatch_with_damage_elsewhere |
 | SYN-021 | part_mismatch | contradicted | not_enough_information | not_visible | match | None | rear_bumper | R020_claimed_part_not_visible |
 | SYN-029 | severity_inflation | contradicted | supported | exact | match | 1 | door | R050_supported_with_overstatement |
-| SYN-032 | poor_image | not_enough_information | contradicted | mismatch | match | None | windshield | R040_part_mismatch,FRAUD:poor_image_quality,FRAUD:part_mismatch_with_damage_elsewhere |
-| SYN-033 | poor_image | not_enough_information | supported | exact | match | None | screen | R052_supported |
 
