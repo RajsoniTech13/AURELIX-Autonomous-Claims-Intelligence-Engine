@@ -1,177 +1,270 @@
-import io
+"""
+Claim execution for the web platform.
+
+This module used to drive `agent_core.orchestrator.graph` — ten nodes, four LLM calls per
+claim, and a fraud/decision verdict produced by the model. That pipeline was superseded in
+Phase 2/4 and the platform was never moved across, so every accuracy improvement of the
+last three phases stopped at the CLI and never reached a user.
+
+It now calls `agent_core.service.analyse_claim_events`, the same code path the benchmark
+runs: one multimodal request per claim, then deterministic alignment, fraud scoring,
+confidence and rules. There is no fallback to the old flow — `agent_core` no longer exports
+it, and `tests/test_backend_pipeline.py` asserts that this module cannot reach it.
+
+**Progress events come from `agent_core`, not from here.** The previous version kept its own
+copy of the graph's routing logic to drive the SSE stream, and that copy had already drifted
+out of sync with the real router. The generator now forwards what the pipeline actually
+reports.
+"""
+from __future__ import annotations
+
+import datetime
 import json
-from PIL import Image
+from typing import Any, Dict, Iterator, List, Optional
+
 from sqlalchemy.orm import Session
-from platform_backend.db.models import Claim, AuditLog
-from platform_backend.services.cache import get_cached_result, set_cached_result
-from agent_core import process_claim
-from agent_core.orchestrator.graph import compiled_graph, _now
 
-def _state_to_db_claim(state_res: dict, user_id: str, image_paths: str, user_claim: str, claim_object: str) -> Claim:
-    """Map the 7-agent graph state to a Claim database row."""
-    decision = state_res.get("decision", {})
-    vision = state_res.get("vision", {})
-    policy = state_res.get("policy", {})
-    fraud = state_res.get("fraud", {})
-    user_risk = state_res.get("user_risk", {})
+from agent_core.service import ClaimAnalysis, analyse_claim_events
+from platform_backend.db.models import AuditLog, Claim
 
-    sup_imgs = vision.get("supporting_image_ids", [])
-    sup_imgs_str = ";".join(sup_imgs) if sup_imgs else "none"
 
-    risk_flags = user_risk.get("risk_flags", [])
-    risk_flags_str = ";".join(risk_flags) if risk_flags else "none"
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _analysis_to_db_claim(
+    analysis: ClaimAnalysis,
+    user_id: str,
+    image_paths: str,
+    user_claim: str,
+    claim_object: str,
+) -> Claim:
+    """
+    Map one `ClaimAnalysis` onto a `Claim` row.
+
+    Field-level notes, because two columns changed meaning and one lost its source:
+
+    * `policy_status` / `policy_reason` still come from the deterministic policy agent,
+      which was never an LLM call and survives the migration unchanged.
+    * `user_risk_score` / `risk_level` likewise, from the deterministic user-history agent.
+    * `issue_type` / `object_part` / `severity` now come from the frozen output contract
+      row rather than raw model prose, so they are guaranteed to be inside the grader's
+      vocabulary before they reach the database.
+    * `impact_direction` and `drivable_status` have **no source in the new pipeline**. They
+      were free-text fields on the old vision agent's response and are not part of the
+      structured perception schema. Columns are retained and left at their defaults so no
+      migration is required and no consumer breaks; see docs/PHASE_4.2_REPORT.md.
+    """
+    verdict = analysis.verdict
+    row = analysis.output_row
+    policy = analysis.policy
+    risk = analysis.user_risk
+
+    supporting = row.get("supporting_image_ids") or "none"
+    risk_flags = ";".join(verdict.risk_flags) if verdict.risk_flags else "none"
 
     return Claim(
         user_id=user_id,
         image_paths=image_paths,
         user_claim=user_claim,
         claim_object=claim_object,
-        policy_status=policy.get("status", "PASS"),
-        policy_reason=policy.get("reason", ""),
-        issue_type=vision.get("issue_type", "unknown"),
-        object_part=vision.get("object_part", "unknown"),
-        severity=vision.get("severity", "unknown"),
-        impact_direction=vision.get("impact_direction", "unknown"),
-        drivable_status=vision.get("drivable_status", True),
-        supporting_image_ids=sup_imgs_str,
-        claim_status=decision.get("claim_status", "not_enough_information"),
-        claim_status_justification=decision.get("justification", ""),
-        confidence_score=decision.get("confidence", 0),
-        manual_review_required=decision.get("manual_review_required", False),
-        escalation_reason=decision.get("escalation_reason"),
-        fraud_score=fraud.get("fraud_score", 0),
-        user_risk_score=user_risk.get("risk_score", 0),
-        risk_level=user_risk.get("risk_level", "LOW"),
-        risk_flags=risk_flags_str,
+        policy_status=getattr(policy, "status", "PASS"),
+        policy_reason=getattr(policy, "reason", ""),
+        issue_type=row.get("issue_type", "unknown"),
+        object_part=row.get("object_part", "unknown"),
+        severity=row.get("severity", "unknown"),
+        impact_direction=None,
+        drivable_status=True,
+        supporting_image_ids=supporting,
+        claim_status=verdict.claim_status,
+        claim_status_justification=verdict.justification,
+        confidence_score=verdict.confidence,
+        manual_review_required=verdict.manual_review_required,
+        escalation_reason=verdict.escalation_reason,
+        fraud_score=verdict.fraud_score,
+        user_risk_score=getattr(risk, "risk_score", 0),
+        risk_level=getattr(risk, "risk_level", "LOW"),
+        risk_flags=risk_flags,
     )
 
-def _save_claim_and_audit(db: Session, db_claim: Claim, audit_logs: list):
-    print("[DEBUG] Adding claim to DB...")
+
+def _audit_logs_for(analysis: ClaimAnalysis) -> List[Dict[str, Any]]:
+    """
+    Build the per-stage audit trail.
+
+    An insurance product without an audit trail is not shippable, and the trail is more
+    useful now than it was: every deterministic stage can state exactly which rule fired,
+    and the perception stage records what the model claimed to see *alongside* what the
+    preflight gate measured, so a reviewer can see where the two disagreed.
+    """
+    logs: List[Dict[str, Any]] = []
+
+    quality = analysis.preflight_quality
+    logs.append({
+        "agent_name": "preflight",
+        "inputs": {"images_declared": getattr(analysis.validation, "file_count", 0)},
+        "outputs": quality.to_dict() if quality else None,
+        "reasoning": (
+            f"Measured image quality {quality.overall} deterministically "
+            f"(blur/exposure, no model involved)." if quality and quality.measured
+            else "No image could be measured."
+        ),
+    })
+
+    if analysis.perception:
+        p = analysis.perception
+        logs.append({
+            "agent_name": "perception",
+            "inputs": {"claim_object": p.claim_understanding.object_category},
+            "outputs": p.model_dump(),
+            "reasoning": (
+                f"Single multimodal request. Observed {p.observed_object}; "
+                f"model self-rated quality {p.image_quality.overall}; "
+                f"{len(p.damage_analysis.damaged_parts)} damaged part(s) reported."
+            ),
+        })
+    else:
+        logs.append({
+            "agent_name": "perception",
+            "inputs": {}, "outputs": {"error": analysis.error},
+            "reasoning": (
+                f"No perception was produced ({analysis.error}). No verdict was inferred "
+                f"from claim text alone."
+            ),
+        })
+
+    if analysis.policy is not None:
+        logs.append({
+            "agent_name": "policy_verification",
+            "inputs": {}, "outputs": analysis.policy.model_dump(),
+            "reasoning": analysis.policy.reason,
+        })
+    if analysis.user_risk is not None:
+        logs.append({
+            "agent_name": "user_risk",
+            "inputs": {}, "outputs": analysis.user_risk.model_dump(),
+            "reasoning": analysis.user_risk.summary,
+        })
+    if analysis.alignment is not None:
+        logs.append({
+            "agent_name": "alignment",
+            "inputs": {}, "outputs": analysis.alignment.to_dict(),
+            "reasoning": " ".join(analysis.alignment.notes) or
+                         f"part_match={analysis.alignment.part_match}, "
+                         f"severity_delta={analysis.alignment.severity_delta}",
+        })
+
+    logs.append({
+        "agent_name": "decision",
+        "inputs": {}, "outputs": analysis.verdict.to_dict(),
+        "reasoning": analysis.verdict.justification,
+    })
+    return logs
+
+
+def _save_claim_and_audit(db: Session, db_claim: Claim, audit_logs: List[Dict[str, Any]]) -> Claim:
     db.add(db_claim)
-    print("[DEBUG] Committing claim to DB...")
     db.commit()
-    print("[DEBUG] Refreshing claim...")
     db.refresh(db_claim)
 
-    print(f"[DEBUG] Adding {len(audit_logs)} audit logs...")
     for log in audit_logs:
-        db_log = AuditLog(
+        db.add(AuditLog(
             claim_id=db_claim.id,
             agent_name=log["agent_name"],
             inputs=log.get("inputs"),
             outputs=log.get("outputs"),
             reasoning=log.get("reasoning"),
-        )
-        db.add(db_log)
-    print("[DEBUG] Committing audit logs...")
+        ))
     db.commit()
     db.refresh(db_claim)
     return db_claim
 
-def execute_claim_sync(
-    db: Session, 
-    user_id: str, 
-    image_paths: str, 
-    user_claim: str, 
-    claim_object: str, 
-    u_history: dict, 
-    e_rules: dict, 
-    pil_images: list = None
-):
-    state_res = process_claim(
-        user_id=user_id,
-        image_paths=image_paths,
-        user_claim=user_claim,
-        claim_object=claim_object,
-        user_history=u_history,
-        evidence_rules=e_rules,
-        images=pil_images or [],
-    )
-    db_claim = _state_to_db_claim(state_res, user_id, image_paths, user_claim, claim_object)
-    return _save_claim_and_audit(db, db_claim, state_res.get("audit_logs", []))
 
-def generate_claim_stream(
-    db: Session, 
-    user_id: str, 
-    image_paths: str, 
-    user_claim: str, 
-    claim_object: str, 
-    u_history: dict, 
-    e_rules: dict, 
-    pil_images: list
-):
-    initial_state = {
-        "user_id": user_id,
-        "image_paths": image_paths,
-        "user_claim": user_claim,
-        "claim_object": claim_object,
-        "user_history": u_history or {},
-        "evidence_rules": e_rules or {},
-        "images": pil_images or [],
-        "image_base_dir": "",
-        "image_validation": {}, "ingestion": {}, "vision": {}, "policy": {},
-        "similar_claims": {}, "user_risk": {}, "fraud": {}, "decision": {},
-        "audit_logs": [], "timeline": [], "pipeline_errors": [],
+def _claim_to_dict(db_claim: Claim) -> Dict[str, Any]:
+    return {
+        "id": db_claim.id, "user_id": db_claim.user_id, "image_paths": db_claim.image_paths,
+        "user_claim": db_claim.user_claim, "claim_object": db_claim.claim_object,
+        "claim_status": db_claim.claim_status,
+        "claim_status_justification": db_claim.claim_status_justification,
+        "confidence_score": db_claim.confidence_score,
+        "manual_review_required": db_claim.manual_review_required,
+        "escalation_reason": db_claim.escalation_reason,
+        "policy_status": db_claim.policy_status, "policy_reason": db_claim.policy_reason,
+        "issue_type": db_claim.issue_type, "object_part": db_claim.object_part,
+        "severity": db_claim.severity, "impact_direction": db_claim.impact_direction,
+        "drivable_status": db_claim.drivable_status,
+        "fraud_score": db_claim.fraud_score, "user_risk_score": db_claim.user_risk_score,
+        "risk_level": db_claim.risk_level, "risk_flags": db_claim.risk_flags,
+        "created_at": db_claim.created_at.isoformat() if db_claim.created_at else None,
+        "audit_logs": [
+            {"agent_name": l.agent_name, "reasoning": l.reasoning,
+             "timestamp": l.timestamp.isoformat()}
+            for l in db_claim.audit_logs
+        ],
     }
 
-    yield f'data: {json.dumps({"stage": "image_validator", "status": "running"})}\n\n'
 
-    final_state = initial_state.copy()
-    completed_branches = set()
-    
+def execute_claim_sync(
+    db: Session,
+    user_id: str,
+    image_paths: str,
+    user_claim: str,
+    claim_object: str,
+    u_history: Optional[dict],
+    e_rules: Optional[dict],
+    pil_images: Optional[list] = None,
+    image_base_dir: Optional[str] = None,
+) -> Claim:
+    """Analyse one claim and persist it. Signature unchanged from the pre-migration version."""
+    analysis: Optional[ClaimAnalysis] = None
+    for event in analyse_claim_events(
+        user_id=user_id, user_claim=user_claim, claim_object=claim_object,
+        image_paths=image_paths, images=pil_images or None,
+        image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
+    ):
+        if event["stage"] == "done":
+            analysis = event["analysis"]
+
+    assert analysis is not None
+    db_claim = _analysis_to_db_claim(analysis, user_id, image_paths, user_claim, claim_object)
+    return _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis))
+
+
+def generate_claim_stream(
+    db: Session,
+    user_id: str,
+    image_paths: str,
+    user_claim: str,
+    claim_object: str,
+    u_history: Optional[dict],
+    e_rules: Optional[dict],
+    pil_images: Optional[list] = None,
+    image_base_dir: Optional[str] = None,
+) -> Iterator[str]:
+    """
+    Server-sent events: one `{stage, status}` per pipeline stage, then `{stage: "done"}`.
+
+    The event shape is unchanged, so the existing client contract holds. The *stage names*
+    changed, because the stages themselves did — see docs/PHASE_4.2_REPORT.md.
+    """
+    analysis: Optional[ClaimAnalysis] = None
     try:
-        for event in compiled_graph.stream(initial_state):
-            node_name = list(event.keys())[0]
-            
-            final_state.update(event[node_name])
-            yield f'data: {json.dumps({"stage": node_name, "status": "complete", "timestamp": _now()})}\n\n'
+        for event in analyse_claim_events(
+            user_id=user_id, user_claim=user_claim, claim_object=claim_object,
+            image_paths=image_paths, images=pil_images or None,
+            image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
+        ):
+            if event["stage"] == "done":
+                analysis = event["analysis"]
+                continue
+            yield f'data: {json.dumps({**event, "timestamp": _now()})}\n\n'
 
-            if node_name == "image_validator":
-                # Ask the graph which way it will actually route rather than re-deriving
-                # the condition here. The duplicated copy of this logic had already
-                # drifted out of sync with the real router.
-                from agent_core.orchestrator.graph import route_after_validation
-                next_stage = route_after_validation(final_state)
-                yield f'data: {json.dumps({"stage": next_stage, "status": "running"})}\n\n'
-            
-            elif node_name == "claim_ingestion":
-                yield f'data: {json.dumps({"stage": "vision_analysis", "status": "running"})}\n\n'
-                yield f'data: {json.dumps({"stage": "policy_verification", "status": "running"})}\n\n'
-                yield f'data: {json.dumps({"stage": "similar_claims", "status": "running"})}\n\n'
-                yield f'data: {json.dumps({"stage": "user_risk", "status": "running"})}\n\n'
-            
-            elif node_name in ["vision_analysis", "policy_verification", "similar_claims", "user_risk"]:
-                completed_branches.add(node_name)
-                if len(completed_branches) == 4:
-                    yield f'data: {json.dumps({"stage": "fraud_review", "status": "running"})}\n\n'
-            
-            elif node_name == "fraud_review":
-                yield f'data: {json.dumps({"stage": "decision", "status": "running"})}\n\n'
+        assert analysis is not None
+        db_claim = _analysis_to_db_claim(
+            analysis, user_id, image_paths, user_claim, claim_object,
+        )
+        db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis))
+        yield f'data: {json.dumps({"stage": "done", "claim": _claim_to_dict(db_claim)})}\n\n'
 
-        print("[DEBUG] Graph stream finished successfully. Preparing DB save...")
-        db_claim = _state_to_db_claim(final_state, user_id, image_paths, user_claim, claim_object)
-        
-        print("[DEBUG] Calling _save_claim_and_audit...")
-        db_claim = _save_claim_and_audit(db, db_claim, final_state.get("audit_logs", []))
-        print("[DEBUG] _save_claim_and_audit completed successfully!")
-        
-        claim_dict = {
-            "id": db_claim.id, "user_id": db_claim.user_id, "image_paths": db_claim.image_paths,
-            "user_claim": db_claim.user_claim, "claim_object": db_claim.claim_object,
-            "claim_status": db_claim.claim_status, "claim_status_justification": db_claim.claim_status_justification,
-            "confidence_score": db_claim.confidence_score, "manual_review_required": db_claim.manual_review_required,
-            "escalation_reason": db_claim.escalation_reason, "policy_status": db_claim.policy_status,
-            "policy_reason": db_claim.policy_reason, "issue_type": db_claim.issue_type,
-            "object_part": db_claim.object_part, "severity": db_claim.severity,
-            "impact_direction": db_claim.impact_direction, "drivable_status": db_claim.drivable_status,
-            "fraud_score": db_claim.fraud_score, "user_risk_score": db_claim.user_risk_score,
-            "risk_level": db_claim.risk_level, "risk_flags": db_claim.risk_flags,
-            "created_at": db_claim.created_at.isoformat() if db_claim.created_at else None,
-            "audit_logs": [{"agent_name": l.agent_name, "reasoning": l.reasoning, "timestamp": l.timestamp.isoformat()} for l in db_claim.audit_logs]
-        }
-
-        yield f'data: {json.dumps({"stage": "done", "claim": claim_dict})}\n\n'
-
-    except Exception as e:
-        print(f"[ERROR] execute_claim_sync generator failed: {str(e)}")
-        yield f'data: {json.dumps({"error": str(e)})}\n\n'
+    except Exception as e:  # noqa: BLE001 - the stream must report, not crash the response
+        yield f'data: {json.dumps({"error": f"{type(e).__name__}: {e}"})}\n\n'

@@ -9,17 +9,18 @@ import { UploadCloud, ChevronRight, ChevronLeft, Image as ImageIcon, CheckCircle
 import { submitClaimStream } from "@/lib/api";
 import { LiveInvestigationViewer } from "./LiveInvestigationViewer";
 
-type StageStatus = "pending" | "running" | "complete" | "failed";
+type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
 type PipelineStages = Record<string, StageStatus>;
 
+// Mirrors PIPELINE_STAGES in agent_core/service.py. Only `perception` reaches the
+// network; everything after it is deterministic Python, which is why a verdict can be
+// re-derived without spending quota.
 const INITIAL_STAGES: PipelineStages = {
-  image_validator: "pending",
-  claim_ingestion: "pending",
-  vision_analysis: "pending",
+  preflight: "pending",
+  perception: "pending",
   policy_verification: "pending",
-  similar_claims: "pending",
   user_risk: "pending",
-  fraud_review: "pending",
+  alignment: "pending",
   decision: "pending"
 };
 

@@ -7,7 +7,11 @@ import {
   Search, FileText, Image as ImageIcon, Check, Activity, Code
 } from "lucide-react";
 
-type StageStatus = "pending" | "running" | "complete" | "failed";
+// `skipped` is a real outcome, not an error: when preflight finds no usable image the
+// perception request is never made, because a claim with nothing to look at cannot
+// produce a grounded finding. Showing it as skipped rather than complete keeps the UI
+// honest about which claims actually cost a model call.
+type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
 type PipelineStages = Record<string, StageStatus>;
 
 interface LiveInvestigationViewerProps {
@@ -44,7 +48,9 @@ export function LiveInvestigationViewer({ stages, files, completedTime, claimRes
     const status = stages[id] || "pending";
     const isActive = status === "running";
     const isComplete = status === "complete";
-    
+    const isSkipped = status === "skipped";
+    const isFailed = status === "failed";
+
     return (
       <motion.div
         variants={nodeVariants}
@@ -52,22 +58,36 @@ export function LiveInvestigationViewer({ stages, files, completedTime, claimRes
         animate={isActive ? "active" : "visible"}
         transition={{ delay, duration: 0.3 }}
         className={`relative flex items-center gap-3 p-3 rounded-lg border ${
-          isActive 
-            ? "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] z-10" 
-            : isComplete 
-              ? "bg-muted/10 border-border/50 opacity-70" 
-              : "bg-background border-border/20 opacity-40"
+          isActive
+            ? "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] z-10"
+            : isFailed
+              ? "bg-destructive/10 border-destructive/50"
+              : isComplete
+                ? "bg-muted/10 border-border/50 opacity-70"
+                : isSkipped
+                  ? "bg-muted/5 border-dashed border-border/40 opacity-60"
+                  : "bg-background border-border/20 opacity-40"
         } ${isParallel ? 'w-full' : 'w-64 mx-auto'}`}
       >
         <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${
-          isActive ? "bg-primary text-primary-foreground" : isComplete ? "bg-emerald-500/20 text-emerald-500" : "bg-muted text-muted-foreground"
+          isActive ? "bg-primary text-primary-foreground"
+            : isFailed ? "bg-destructive/20 text-destructive"
+            : isComplete ? "bg-emerald-500/20 text-emerald-500"
+            : "bg-muted text-muted-foreground"
         }`}>
-          {isComplete ? <Check className="h-4 w-4" /> : isActive ? <Activity className="h-4 w-4 animate-pulse" /> : <Icon className="h-4 w-4" />}
+          {isFailed ? <AlertTriangle className="h-4 w-4" />
+            : isComplete ? <Check className="h-4 w-4" />
+            : isActive ? <Activity className="h-4 w-4 animate-pulse" />
+            : <Icon className="h-4 w-4" />}
         </div>
         <div className="flex flex-col flex-1 truncate">
           <span className={`text-sm font-medium truncate ${isActive ? "text-primary" : ""}`}>{label}</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
-            {isActive ? "Executing..." : isComplete ? "Completed" : "Waiting"}
+            {isActive ? "Executing..."
+              : isFailed ? "Failed"
+              : isSkipped ? "Skipped — no usable image"
+              : isComplete ? "Completed"
+              : "Waiting"}
           </span>
         </div>
         {isActive && (
@@ -136,29 +156,32 @@ export function LiveInvestigationViewer({ stages, files, completedTime, claimRes
         {/* Center Pane: Orchestration Graph */}
         <div className="flex-1 flex flex-col relative bg-[#0a0a0c] overflow-y-auto custom-scrollbar p-8">
           <div className="max-w-xl mx-auto w-full flex flex-col items-center space-y-6 pb-20">
-            <Node id="image_validator" label="Image Validation" icon={ImageIcon} delay={0.1} />
+            <Node id="preflight" label="Preflight — Quality Gate" icon={ImageIcon} delay={0.1} />
+
             <div className="h-8 w-px bg-border/50" />
-            <Node id="claim_ingestion" label="Claim Ingestion" icon={FileText} delay={0.2} />
-            
+
+            <div className="w-full relative border border-primary/40 rounded-xl p-6 bg-primary/5">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0a0a0c] px-3 text-[10px] font-mono text-primary border border-primary/40 rounded-full">
+                1 MULTIMODAL REQUEST
+              </div>
+              <Node id="perception" label="Perception" icon={Search} isParallel delay={0.2} />
+            </div>
+
             <div className="h-8 w-px bg-border/50" />
-            
+
             <div className="w-full relative border border-border/30 rounded-xl p-6 bg-card/5">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0a0a0c] px-3 text-[10px] font-mono text-muted-foreground border border-border/30 rounded-full">
-                PARALLEL FAN-OUT
+                DETERMINISTIC — NO MODEL
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Node id="vision_analysis" label="Vision Analysis" icon={Search} isParallel delay={0.3} />
-                <Node id="policy_verification" label="Policy Check" icon={ShieldCheck} isParallel delay={0.4} />
-                <Node id="similar_claims" label="Vector Search" icon={FileText} isParallel delay={0.5} />
-                <Node id="user_risk" label="User Risk" icon={UserX} isParallel delay={0.6} />
+                <Node id="policy_verification" label="Policy Check" icon={ShieldCheck} isParallel delay={0.3} />
+                <Node id="user_risk" label="User Risk" icon={UserX} isParallel delay={0.4} />
+                <Node id="alignment" label="Claim vs Evidence" icon={FileText} isParallel delay={0.5} />
               </div>
             </div>
 
             <div className="h-8 w-px bg-border/50" />
-            <Node id="fraud_review" label="Fraud Detection" icon={AlertTriangle} delay={0.7} />
-            
-            <div className="h-8 w-px bg-border/50" />
-            <Node id="decision" label="Final Decision" icon={CheckCircle2} delay={0.8} />
+            <Node id="decision" label="Fraud, Confidence & Verdict" icon={CheckCircle2} delay={0.6} />
           </div>
         </div>
 

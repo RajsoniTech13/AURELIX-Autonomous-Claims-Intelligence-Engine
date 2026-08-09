@@ -22,7 +22,6 @@ from platform_backend.models.schemas import (
     ObjectDistribution, SeverityDistribution, ConfidenceBucket, FraudBucket
 )
 from platform_backend.services.cache import get_cached_result, set_cached_result
-from agent_core import process_claim
 
 router = APIRouter()
 

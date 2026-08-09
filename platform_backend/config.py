@@ -1,5 +1,17 @@
 import os
+
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+# Load .env into the process environment before Settings is constructed.
+#
+# `env_file = ".env"` below only populates this Settings object. `agent_core` reads
+# GEMINI_API_KEY from os.environ, so without this the API server starts fine, accepts
+# uploads, and then fails every perception call with "GEMINI_API_KEY is not set" —
+# which is exactly what it did the first time the server was ever actually started.
+# The CLI always called load_dotenv(); the web platform never did.
+load_dotenv()
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AURELIX Claims Intelligence"

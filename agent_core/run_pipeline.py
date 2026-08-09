@@ -36,10 +36,9 @@ from agent_core.agents.perception import (  # noqa: E402
     PreparedClaim,
     run_batch_perception,
 )
-from agent_core.rules_engine import decide, effective_quality  # noqa: E402
 from agent_core.schemas.perception import ClaimPerception  # noqa: E402
-from agent_core.schemas.contract import OUTPUT_COLUMNS, coerce_to_vocabulary, join_multi, to_bool_str  # noqa: E402
-from agent_core.schemas.contract import ISSUE_TYPE_VALUES, OBJECT_PART_VALUES, SEVERITY_VALUES  # noqa: E402
+from agent_core.schemas.contract import OUTPUT_COLUMNS  # noqa: E402
+from agent_core.service import judge, to_output_row  # noqa: E402
 from agent_core.services.batch_scheduler import affordable_batches, describe_plan, plan_batches  # noqa: E402
 from agent_core.services.checkpoint import CheckpointStore  # noqa: E402
 from agent_core.services.config import batching_config, model_config  # noqa: E402
@@ -115,90 +114,6 @@ def prepare_claims(
         ))
 
     return sendable, resolved, quality_by_id
-
-
-# ─── Judgement (pure Python) ────────────────────────────────────────────────
-
-def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """Alignment + rules for one claim. No LLM, fully reproducible."""
-    perception = entry.get("perception")
-    row = entry["row"]
-    quality = entry.get("preflight_quality") or UNMEASURED
-
-    alignment = compute_alignment(perception, row.get("claim_object", "")) if perception else None
-
-    verdict = decide(
-        alignment, perception,
-        no_usable_image=entry.get("no_usable_image", False),
-        perception_failed=entry.get("perception_failed", False),
-        extra_risk_flags=list(getattr(entry.get("validation"), "risk_flags", []) or []),
-        preflight_quality=quality,
-    )
-
-    return {
-        "claim_id": entry["claim_id"],
-        "row": row,
-        "perception": perception,
-        "preflight_quality": quality,
-        "alignment": alignment,
-        "verdict": verdict,
-        "batch_id": entry.get("batch_id"),
-        "model": entry.get("model"),
-        "error": entry.get("error"),
-    }
-
-
-def to_output_row(result: Dict[str, Any]) -> Dict[str, str]:
-    """Render one judged claim into the frozen 14-column contract."""
-    row, perception, verdict = result["row"], result["perception"], result["verdict"]
-    alignment = result["alignment"]
-
-    issue_type, object_part, severity = "unknown", "unknown", "unknown"
-    supporting: List[str] = []
-    if perception:
-        damages = perception.damage_analysis.damaged_parts
-        chosen = None
-        if alignment and alignment.matched_part:
-            chosen = next((d for d in damages if d.part == alignment.matched_part), None)
-        chosen = chosen or (damages[0] if damages else None)
-        if chosen:
-            issue_type = coerce_to_vocabulary(chosen.issue_type, ISSUE_TYPE_VALUES, "unknown")
-            object_part = coerce_to_vocabulary(chosen.part, OBJECT_PART_VALUES, "unknown")
-            severity = coerce_to_vocabulary(chosen.severity, SEVERITY_VALUES, "unknown")
-        elif perception.claimed_part_visible:
-            issue_type, severity = "none", "none"
-        supporting = [s for s in perception.supporting_image_ids if s.startswith("img_")]
-
-    # Quality here is the gated value, not the model's self-report: the CSV must agree with
-    # the verdict, and the verdict was reached on the measured figure.
-    band, score, _ = effective_quality(perception, result.get("preflight_quality"))
-    evidence_met = bool(perception and band in ("good", "fair"))
-    if not perception:
-        evidence_reason = "No usable image evidence was submitted with this claim."
-    elif band != perception.image_quality.overall:
-        evidence_reason = (
-            f"Image quality measured {band} (score {score}) by deterministic preflight, "
-            f"overriding the model's assessment of {perception.image_quality.overall}."
-        )
-    else:
-        evidence_reason = f"Image quality assessed {band} (score {score})."
-
-    return {
-        "user_id": row.get("user_id", ""),
-        "image_paths": row.get("image_paths", ""),
-        "user_claim": row.get("user_claim", ""),
-        "claim_object": row.get("claim_object", ""),
-        "evidence_standard_met": to_bool_str(evidence_met),
-        "evidence_standard_met_reason": evidence_reason,
-        "risk_flags": join_multi(verdict.risk_flags, empty="none"),
-        "issue_type": issue_type,
-        "object_part": object_part,
-        "claim_status": verdict.claim_status,
-        "claim_status_justification": verdict.justification,
-        "supporting_image_ids": join_multi(supporting, empty="none"),
-        "valid_image": to_bool_str(bool(perception)),
-        "severity": severity,
-    }
 
 
 # ─── Runner ─────────────────────────────────────────────────────────────────
