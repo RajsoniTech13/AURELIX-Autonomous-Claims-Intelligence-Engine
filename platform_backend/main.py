@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from platform_backend.config import settings
 from platform_backend.db.session import init_db
 from platform_backend.api.routes import router
+from platform_backend.api.v1 import router as v1_router
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
@@ -32,6 +33,19 @@ def on_startup():
     # Loading is best-effort on purpose: a missing or out-of-date index must not stop the
     # API from accepting claims. Retrieval informs a reviewer; it does not decide anything,
     # so its absence degrades context rather than correctness.
+    # Jobs left running by a process that died cannot be resumed by a single-process
+    # pool. Failing them is honest; leaving them `running` means a client polls forever
+    # and no operator ever finds out.
+    from platform_backend.db.session import SessionLocal
+    from platform_backend.services.jobs import reap_orphans
+    db = SessionLocal()
+    try:
+        reaped = reap_orphans(db)
+        if reaped:
+            print(f"[Jobs] marked {reaped} interrupted job(s) as failed")
+    finally:
+        db.close()
+
     from agent_core.retrieval.collections import IndexBundle
     try:
         app.state.index = IndexBundle.load()
@@ -41,4 +55,13 @@ def on_startup():
         app.state.index = IndexBundle()
         print(f"[Retrieval] index NOT loaded: {e}")
 
+@app.on_event("shutdown")
+def on_shutdown():
+    # Drain in-flight analysis rather than dropping work already paid for out of a
+    # 20-request daily budget.
+    from platform_backend.services.jobs import shutdown
+    shutdown(wait=True)
+
+
+app.include_router(v1_router)
 app.include_router(router)

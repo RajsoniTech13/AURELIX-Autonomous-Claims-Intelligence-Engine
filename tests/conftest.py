@@ -14,9 +14,17 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True)
 def _isolated_image_index(tmp_path_factory):
-    """Point every test at a throwaway image index. Autouse: opting in is too easy to forget."""
+    """
+    A throwaway image index **per test**. Autouse, because opting in is too easy to forget.
+
+    Per test rather than per session, learned the hard way: two tests generating a photo
+    from the same random seed produce byte-identical images, so the second one matched the
+    first as a reused photograph and came back `contradicted` instead of `supported` — a
+    failure that appeared only in the full suite and never in isolation. The detector was
+    right; the shared index was the bug.
+    """
     import os
 
     index_path = tmp_path_factory.mktemp("image_index") / "test_index.db"

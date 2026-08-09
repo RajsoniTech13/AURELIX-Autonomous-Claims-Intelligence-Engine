@@ -23,7 +23,7 @@ import importlib
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterator, Set
+from typing import Iterator, Optional, Set
 
 import pytest
 from PIL import Image
@@ -161,16 +161,40 @@ def test_importing_the_app_does_not_pull_in_the_superseded_flow():
 # ─── 2. Call count ──────────────────────────────────────────────────────────
 
 class GeminiSpy:
-    """Counts calls to the multimodal client and returns a canned perception."""
+    """
+    Counts calls to the multimodal client and returns a canned perception.
 
-    def __init__(self, claim_id: str = "C1"):
+    When `claim_id` is not given the spy **echoes the ids it was actually asked about**,
+    parsed out of the request text. A spy that answers with a fixed id is correctly
+    rejected by the isolation check, so hard-coding one turns every test into a test of
+    `BatchIsolationError` rather than of whatever it meant to cover.
+    """
+
+    def __init__(self, claim_id: Optional[str] = None):
         self.calls = 0
         self.claim_id = claim_id
 
+    def _requested_ids(self, contents) -> list[str]:
+        if self.claim_id:
+            return [self.claim_id]
+        found = []
+        for part in contents:
+            if isinstance(part, str):
+                for line in part.splitlines():
+                    if line.startswith("claim_id: "):
+                        found.append(line.split("claim_id: ", 1)[1].strip())
+        return found or ["C1"]
+
     def __call__(self, *, contents, response_model, **kwargs):
         self.calls += 1
-        return BatchPerceptionOutput.model_validate({"results": [{
-            "claim_id": self.claim_id,
+        return BatchPerceptionOutput.model_validate({"results": [
+            self._result(cid) for cid in self._requested_ids(contents)
+        ]})
+
+    @staticmethod
+    def _result(claim_id: str) -> dict:
+        return {
+            "claim_id": claim_id,
             "observed_object": "car",
             "image_quality": {"overall": "good", "score": 90, "issues": ["none"]},
             "claim_understanding": {
@@ -185,7 +209,7 @@ class GeminiSpy:
             "supporting_image_ids": ["img_1"],
             "evidence": [], "uncertainties": [],
             "instruction_like_text_present": False,
-        }]})
+        }
 
 
 @pytest.fixture
