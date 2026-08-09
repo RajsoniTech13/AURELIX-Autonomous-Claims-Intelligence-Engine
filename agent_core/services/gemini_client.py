@@ -42,14 +42,18 @@ from pydantic import BaseModel
 from agent_core.services.config import (
     active_tier,
     circuit_breaker_config,
+    model_config,
     model_limits,
     retry_config,
 )
+from agent_core.services.quota_ledger import QuotaLedger
+
+_quota_ledger = QuotaLedger()
 
 T = TypeVar("T", bound=BaseModel)
 logger = logging.getLogger("aurelix.gemini")
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 # ─── Failure surface ────────────────────────────────────────────────────────
@@ -73,6 +77,21 @@ class CircuitOpenError(LLMUnavailableError):
     """Raised while the breaker is open, so we fail fast instead of stampeding the API."""
 
 
+class DailyQuotaExhausted(LLMUnavailableError):
+    """
+    The per-day request budget for this model is spent.
+
+    Split out from ordinary rate limiting because the correct response is the opposite:
+    an RPM 429 should be waited out, an RPD 429 cannot be. On a 20-request daily budget,
+    retrying a daily exhaustion four times destroys 20% of the next day's capacity to
+    learn something the first response already told us.
+    """
+
+    def __init__(self, message: str, model: str = ""):
+        super().__init__(message)
+        self.model = model
+
+
 # ─── Error classification ───────────────────────────────────────────────────
 
 def _status_code(exc: BaseException) -> Optional[int]:
@@ -81,12 +100,52 @@ def _status_code(exc: BaseException) -> Optional[int]:
     return code if isinstance(code, int) else None
 
 
+def _quota_scope(exc: BaseException) -> Optional[str]:
+    """
+    Classify a 429 as 'per_minute' or 'per_day' from the structured quota violation.
+
+    Gemini reports which budget was hit:
+        quotaId: GenerateRequestsPerMinutePerProjectPerModel-FreeTier
+        quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
+
+    Returns None when this is not a quota error or the scope cannot be determined.
+    """
+    if _status_code(exc) != 429:
+        return None
+
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict):
+        error_obj = details.get("error", details)
+        for item in error_obj.get("details", []) or []:
+            if not isinstance(item, dict) or not item.get("@type", "").endswith("QuotaFailure"):
+                continue
+            for violation in item.get("violations", []) or []:
+                qid = str(violation.get("quotaId", ""))
+                if "PerDay" in qid:
+                    return "per_day"
+                if "PerMinute" in qid:
+                    return "per_minute"
+
+    # Fall back to the message text if the structured form is missing.
+    text = str(exc)
+    if "PerDay" in text:
+        return "per_day"
+    if "PerMinute" in text:
+        return "per_minute"
+    return None
+
+
 def _is_retryable(exc: BaseException) -> bool:
     """
     Retry transport failures and server-side congestion. Never retry 400/401/403 —
     a malformed request or a bad key will fail identically every time, and retrying
     only delays the moment someone notices the bug.
     """
+    # A daily exhaustion is never retryable. Waiting will not help before midnight UTC,
+    # and every attempt spends budget we do not have.
+    if _quota_scope(exc) == "per_day":
+        return False
+
     code = _status_code(exc)
     if code is not None:
         return code in set(retry_config()["retryable_status_codes"])
@@ -403,6 +462,17 @@ def _execute_with_retry(call, *, description: str):
             last_exc = exc
             code = _status_code(exc)
 
+            if _quota_scope(exc) == "per_day":
+                # Not a breaker failure: the API is healthy, we are simply out of budget.
+                model_name = getattr(call, "_aurelix_model", "") or ""
+                _quota_ledger.mark_exhausted(model_name)
+                raise DailyQuotaExhausted(
+                    f"{description}: daily request quota exhausted for "
+                    f"{model_name or 'this model'}. Stopping rather than retrying; "
+                    f"remaining work is checkpointed for the next quota reset.",
+                    model=model_name,
+                ) from exc
+
             if not _is_retryable(exc):
                 _breaker.record_failure()
                 raise LLMUnavailableError(
@@ -465,13 +535,26 @@ def _generate(
     def _call() -> T:
         governor.acquire(model, est_tokens)
         client = _get_client()
-        response = client.models.generate_content(model=model, contents=contents, config=config)
+        # Recorded before the call, not after: a request that fails on the server side has
+        # still consumed budget, and under-counting is the expensive direction of error.
+        _quota_ledger.record_request(model)
+        try:
+            response = client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as exc:
+            # Refund anything the server did not actually process. 5xx means it declined
+            # the work; 400/403/404 means it rejected the request outright. Neither should
+            # count against a 20-per-day budget. Measured impact: a model that 404s on
+            # every call silently consumed 13 slots of recorded budget in the first run.
+            if _status_code(exc) in (400, 403, 404, 500, 502, 503, 504):
+                _quota_ledger.refund_request(model)
+            raise
         text = (response.text or "").strip()
         if not text:
             # A blocked or empty completion is a failure, not an empty verdict.
             raise LLMUnavailableError(f"{description} returned an empty response body")
         return response_model.model_validate_json(text)
 
+    _call._aurelix_model = model  # type: ignore[attr-defined]  # for quota attribution
     result = _execute_with_retry(_call, description=description)
 
     if cache_key:
@@ -526,3 +609,93 @@ def call_gemini_vision(
         est_tokens=estimate_tokens(prompt, image_count=len(images)),
         description=f"{response_model.__name__} (vision, {len(images)} image(s))",
     )
+
+
+# ─── Batched multimodal, with a free-tier model ladder ──────────────────────
+
+def remaining_requests(model: str) -> int:
+    """Requests left today for a model, per the persisted ledger."""
+    return _quota_ledger.remaining(model, model_limits(model)["rpd"])
+
+
+def quota_summary() -> str:
+    chain = model_config()["chain"]
+    return _quota_ledger.summary({m: model_limits(m)["rpd"] for m in chain})
+
+
+def call_gemini_multimodal(
+    contents: List[Any],
+    response_model: Type[T],
+    model: Optional[str] = None,
+    temperature: float = 0.1,
+    cache_key: Optional[str] = None,
+    description: str = "multimodal",
+) -> T:
+    """
+    Arbitrary interleaved text+image content, structured response.
+
+    Walks the configured model ladder. Free-tier quota is **per model**, so when the primary
+    is exhausted the next model is a fresh 20-request budget rather than a wall — three
+    free models is 60 requests/day without paying anything. A model is skipped when the
+    ledger already knows it is spent, so we do not burn a request rediscovering that.
+
+    Raises `DailyQuotaExhausted` only when every rung is spent.
+    """
+    chain: List[str] = [model] if model else list(model_config()["chain"])
+    image_count = sum(1 for part in contents if isinstance(part, Image.Image))
+    text_len = sum(len(p) for p in contents if isinstance(p, str))
+    est = estimate_tokens("x" * text_len, image_count=image_count)
+
+    # Cache lookup is model-independent: a cached perception is equally valid whichever
+    # rung produced it.
+    if cache_key:
+        cached = _cache_get(cache_key)
+        if cached:
+            logger.info("[Cache] hit for %s", description)
+            return response_model.model_validate_json(cached)
+
+    last_error: Optional[BaseException] = None
+    tried: List[str] = []
+
+    for candidate in chain:
+        if remaining_requests(candidate) <= 0:
+            logger.warning("[Gemini] skipping %s: daily budget already spent", candidate)
+            tried.append(f"{candidate}(spent)")
+            continue
+        try:
+            result = _generate(
+                contents=contents,
+                response_model=response_model,
+                model=candidate,
+                temperature=temperature,
+                cache_key=None,          # written once below, after success
+                est_tokens=est,
+                description=f"{description} on {candidate}",
+            )
+            if cache_key:
+                _cache_set(cache_key, result.model_dump_json())
+            return result
+        except DailyQuotaExhausted as e:
+            logger.warning("[Gemini] %s exhausted; advancing to next model", candidate)
+            tried.append(f"{candidate}(exhausted)")
+            last_error = e
+            continue
+        except LLMUnavailableError as e:
+            # A model that is persistently 503 or timing out is as unusable as one that is
+            # out of quota, and the ladder is the right response to both. Only give up once
+            # every rung has been tried.
+            logger.warning("[Gemini] %s unavailable (%s); advancing to next model", candidate, e)
+            tried.append(f"{candidate}(unavailable)")
+            last_error = e
+            continue
+
+    if isinstance(last_error, DailyQuotaExhausted) or not last_error:
+        raise DailyQuotaExhausted(
+            f"{description}: every configured model is out of daily free quota "
+            f"(tried {', '.join(tried) or 'none'}). Work is checkpointed; resume after reset.",
+        ) from last_error
+
+    raise LLMUnavailableError(
+        f"{description}: no configured model could serve this request "
+        f"(tried {', '.join(tried)}). Last error: {last_error}"
+    ) from last_error

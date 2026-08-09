@@ -75,7 +75,12 @@ def test_server_requested_delay_absent_when_no_retry_info():
 
 # ─── The retry loop actually runs ───────────────────────────────────────────
 
-def test_retry_loop_executes_and_eventually_succeeds(sleeps):
+def test_retry_loop_executes_and_eventually_succeeds(sleeps, monkeypatch):
+    """Pins retry *behaviour*, independent of how many attempts config currently allows."""
+    monkeypatch.setattr(gc, "retry_config", lambda: {
+        "max_attempts": 4, "base_delay_seconds": 1.0, "max_delay_seconds": 32.0,
+        "retryable_status_codes": [429, 500, 502, 503, 504],
+    })
     calls = {"n": 0}
 
     def flaky():
@@ -87,6 +92,15 @@ def test_retry_loop_executes_and_eventually_succeeds(sleeps):
     assert gc._execute_with_retry(flaky, description="test") == "ok"
     assert calls["n"] == 3
     assert len(sleeps) == 2, "must actually back off between attempts"
+
+
+def test_retry_attempts_are_low_because_a_model_ladder_exists():
+    """
+    With four free models configured, failing over beats grinding on an overloaded one.
+    gemini-3.6-flash returned 'high demand' 503s on every attempt during the first
+    benchmark run; four attempts per rung only delayed reaching a model that worked.
+    """
+    assert gc.retry_config()["max_attempts"] <= 2
 
 
 def test_server_delay_is_preferred_over_own_backoff(sleeps):

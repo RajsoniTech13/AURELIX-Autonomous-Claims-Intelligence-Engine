@@ -63,3 +63,5 @@ log.txt
 test_gemini.py
 
 PROMPT.md
+# AURELIX local run state (quota ledger, checkpoint db)
+.aurelix/

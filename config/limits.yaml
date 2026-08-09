@@ -18,17 +18,51 @@
 
 active_tier: free
 
+# ─── Model ladder ────────────────────────────────────────────────────────────
+# Free-tier quota is PER MODEL, so each rung is a fresh daily budget rather than a
+# wall. Three free models is 60 requests/day at zero cost. Measured image cost:
+# gemini-3.6-flash charges 1089 tokens/image, the 2.5 family 258 -- irrelevant here
+# because tokens are nowhere near binding (a 12-claim batch is 2.8% of context).
+models:
+  primary: gemini-3.6-flash
+  chain:
+    - gemini-3.6-flash
+    - gemini-3.5-flash
+    - gemini-2.5-flash
+  # gemini-2.5-flash-lite is deliberately NOT in the chain: it returns 404 NOT_FOUND for
+  # this batched multimodal + response_schema request shape. Measured, not assumed --
+  # it failed all 13 times it was reached during the first benchmark run.
+
+# ─── Batching ────────────────────────────────────────────────────────────────
+# 44 claims / 3 per request = 15 requests, inside the 20 RPD budget with margin.
+# Do NOT raise max_claims_per_request to save quota: quota is not the scarce
+# resource, cross-claim isolation is. Raise it only if the isolation fixture in
+# tests/test_batch_isolation.py still passes at the higher value.
+batching:
+  max_claims_per_request: 3
+  max_images_per_request: 9
+  max_images_per_claim: 3
+  daily_request_reserve: 2      # keep this many requests unspent as headroom
+
 tiers:
   free:
     models:
+      gemini-3.6-flash:
+        rpm: 5
+        tpm: 250000
+        rpd: 20
       gemini-2.5-flash:
         rpm: 5
         tpm: 250000
         rpd: 20
-      gemini-2.5-flash-lite:
-        rpm: 15
+      gemini-3.5-flash:
+        rpm: 5
         tpm: 250000
-        rpd: 1000
+        rpd: 20
+      gemini-2.5-flash-lite:
+        rpm: 10
+        tpm: 250000
+        rpd: 20
     default:
       rpm: 5
       tpm: 250000
@@ -50,7 +84,11 @@ tiers:
       rpd: 10000
 
 retry:
-  max_attempts: 4
+  # Kept low on purpose. With a four-model ladder available, failing over to a healthy
+  # model beats retrying an overloaded one -- gemini-3.6-flash returned "high demand"
+  # 503s on every attempt during the first benchmark run, and four attempts per rung
+  # just delayed reaching a model that worked.
+  max_attempts: 2
   base_delay_seconds: 1.0
   max_delay_seconds: 32.0
   # Only these are retried. 400/401/403 are bugs or bad credentials — fail fast, loudly.

@@ -1,0 +1,155 @@
+# AURELIX — decision rules.
+#
+# Ordered. First match wins. Every rule carries a rule_id that appears in the
+# justification, so any verdict can be traced to the rule that produced it.
+#
+# The ordering encodes one principle: **evidence problems are settled before
+# evidence conflicts.** A claim we could not assess must never be recorded as
+# contradicted, because "we could not see it" and "it is false" are different
+# statements and only one of them is defensible to a claimant.
+
+version: 1
+
+rules:
+  # ── Evidence adequacy: can we judge at all? ──────────────────────────────
+  - id: R001_no_usable_image
+    when: {no_usable_image: true}
+    verdict: not_enough_information
+    risk_flags: [damage_not_visible]
+    reason: "No usable image evidence was submitted, so no visual finding could be made."
+
+  - id: R002_perception_unavailable
+    when: {perception_failed: true}
+    verdict: not_enough_information
+    risk_flags: []
+    reason: "Automated analysis could not complete for this claim; no inference was made."
+
+  # ── Object identity: is this even the right thing? ───────────────────────
+  # Ahead of BOTH the quality gate and the part checks. Recognising that a photo
+  # shows a cat rather than a car is a positive finding, not an evidence failure --
+  # and models tend to rate an off-subject photo as "unusable" quality, which in the
+  # first benchmark run routed all three wrong-object cases to
+  # not_enough_information instead of contradicted.
+  - id: R010_wrong_object
+    when: {object_match: mismatch}
+    verdict: contradicted
+    risk_flags: [claim_mismatch, damage_not_visible]
+    reason: "The submitted images show a different object from the one described in the claim."
+
+  - id: R003_image_quality_unusable
+    when: {image_quality: unusable}
+    verdict: not_enough_information
+    risk_flags: [blurry_image, damage_not_visible]
+    reason: "The submitted images are not of sufficient quality to assess the claimed damage."
+
+  # ── Absence of evidence ──────────────────────────────────────────────────
+  # The distinction the system exists for. Must sit above every mismatch rule.
+  - id: R020_claimed_part_not_visible
+    when: {part_match: not_visible}
+    verdict: not_enough_information
+    risk_flags: [damage_not_visible, wrong_angle]
+    reason: "The part named in the claim is not visible in any submitted image, so the claim can be neither confirmed nor contradicted."
+
+  - id: R021_part_never_specified
+    when: {part_match: unknown, damage_detected: false}
+    verdict: not_enough_information
+    risk_flags: [damage_not_visible]
+    reason: "The claimant did not identify a specific damaged part and no damage is visible."
+
+  # ── Fraud ────────────────────────────────────────────────────────────────
+  - id: R030_duplicate_image_reuse
+    when: {duplicate_image_reuse: true}
+    verdict: contradicted
+    risk_flags: [possible_manipulation, claim_mismatch]
+    reason: "An image in this claim was previously submitted under a different claim."
+
+  - id: R031_high_fraud_score
+    when: {fraud_score_gte: 70}
+    verdict: contradicted
+    risk_flags: [possible_manipulation, claim_mismatch]
+    reason: "Multiple objective fraud indicators are present in this claim."
+
+  # ── Evidence conflicts ───────────────────────────────────────────────────
+  - id: R040_part_mismatch
+    when: {part_match: mismatch, damage_detected: true}
+    verdict: contradicted
+    risk_flags: [claim_mismatch]
+    reason: "Damage was observed, but on a different part from the one claimed."
+
+  - id: R041_no_damage_on_visible_part
+    when: {part_match: mismatch, damage_detected: false}
+    verdict: contradicted
+    risk_flags: [claim_mismatch, damage_not_visible]
+    reason: "The claimed part is clearly visible and shows no damage."
+
+  - id: R042_severity_inflation
+    when: {part_match_in: [exact, adjacent], severity_delta_gte: 2}
+    verdict: contradicted
+    risk_flags: [claim_mismatch]
+    reason: "Damage is present on the claimed part but is materially less severe than described."
+
+  # ── Support ──────────────────────────────────────────────────────────────
+  - id: R050_supported_with_overstatement
+    when: {part_match_in: [exact, adjacent], severity_delta_gte: 1}
+    verdict: supported
+    risk_flags: []
+    reason: "Damage is confirmed on the claimed part, slightly less severe than described."
+
+  - id: R051_supported_adjacent
+    when: {part_match: adjacent}
+    verdict: supported
+    risk_flags: []
+    reason: "Damage is confirmed on a part adjacent to the one claimed, consistent with the described incident."
+
+  - id: R052_supported
+    when: {part_match: exact}
+    verdict: supported
+    risk_flags: []
+    reason: "The submitted images confirm the claimed damage on the claimed part."
+
+  # ── Fallback ─────────────────────────────────────────────────────────────
+  - id: R099_indeterminate
+    when: {always: true}
+    verdict: not_enough_information
+    risk_flags: [damage_not_visible]
+    reason: "The available evidence does not allow a determination either way."
+
+# ── Escalation ─────────────────────────────────────────────────────────────
+escalation:
+  confidence_below: 70
+  always_review_verdicts: [contradicted]
+  always_review_flags: [possible_manipulation, text_instruction_present]
+
+# ── Fraud scoring ──────────────────────────────────────────────────────────
+# Additive, capped. Base is deliberately low: fraud is never assumed, and an
+# unhelpful or badly-worded claim is not evidence of dishonesty.
+fraud:
+  base_score: 10
+  signals:
+    duplicate_image_reuse: 45
+    object_mismatch: 30
+    part_mismatch_with_damage_elsewhere: 20
+    severity_inflation: 20
+    user_history_risk: 15
+    instruction_like_text: 10
+    poor_image_quality: 5
+  review_threshold: 50
+  contradiction_threshold: 70
+
+# ── Confidence ─────────────────────────────────────────────────────────────
+# Weighted blend of signals we can actually measure. Weights sum to 1.0.
+confidence:
+  weights:
+    visual_confidence: 0.30
+    image_quality: 0.25
+    part_match_strength: 0.25
+    severity_agreement: 0.20
+  part_match_strength:
+    exact: 100
+    adjacent: 75
+    mismatch: 60      # a confident mismatch is still a confident reading
+    not_visible: 20
+    unknown: 25
+  penalties:
+    perception_failed: 100
+    no_usable_image: 80

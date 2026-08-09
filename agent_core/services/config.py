@@ -41,6 +41,15 @@ def model_limits(model: str) -> Dict[str, int]:
     return tier["models"].get(model) or tier["default"]
 
 
+def model_config() -> Dict[str, Any]:
+    """Primary model plus the fallback ladder. Each rung has its own free daily budget."""
+    return load_config()["models"]
+
+
+def batching_config() -> Dict[str, Any]:
+    return load_config()["batching"]
+
+
 def retry_config() -> Dict[str, Any]:
     return load_config()["retry"]
 
