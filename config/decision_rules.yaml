@@ -117,7 +117,13 @@ rules:
 # ── Escalation ─────────────────────────────────────────────────────────────
 escalation:
   confidence_below: 70
-  always_review_verdicts: [contradicted]
+  # `not_enough_information` joins `contradicted` here because it is not an outcome a
+  # claimant can be given -- it is the system saying it could not decide, which by
+  # definition is a claim a human has to pick up. Without this an unusable photograph
+  # could produce a confident-looking "could not determine" (the confidence blend scores
+  # confidence in the *verdict*, and we are quite sure we could not see) that then sat in
+  # no queue at all.
+  always_review_verdicts: [contradicted, not_enough_information]
   always_review_flags: [possible_manipulation, text_instruction_present]
 
 # ── Fraud scoring ──────────────────────────────────────────────────────────
