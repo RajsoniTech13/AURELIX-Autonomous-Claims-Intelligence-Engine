@@ -6,7 +6,34 @@ import {
   Activity, Clock, ShieldCheck, Zap, ArrowRight, 
   Search, AlertTriangle, CheckCircle2, UserX, FileText
 } from "lucide-react";
-import { getClaims } from "@/lib/api";
+import { getAnalytics, getClaims } from "@/lib/api";
+
+/**
+ * Every row in this table said "Just now" — a literal string, not a computed one, so a
+ * claim from last week and one from ten seconds ago were indistinguishable.
+ *
+ * The API now sends an explicit UTC offset. Without it `new Date()` reads the timestamp as
+ * local time and every claim lands in the reader's own future, which is why this needs to
+ * tolerate a small negative skew rather than printing "in 5 hours".
+ */
+function relativeTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (Math.abs(seconds) < 45) return "just now";
+
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31557600], ["month", 2629800], ["week", 604800],
+    ["day", 86400], ["hour", 3600], ["minute", 60],
+  ];
+  const fmt = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return fmt.format(-Math.round(seconds / size), unit);
+  }
+  return "just now";
+}
 
 const container = {
   hidden: { opacity: 0 },
@@ -21,23 +48,43 @@ const item = {
   show: { opacity: 1, y: 0 }
 };
 
-export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => void }) {
+export function HomeDashboard({
+  onNavigate,
+  onSelectClaim,
+}: {
+  onNavigate: (tab: string) => void;
+  /** Open one claim's full investigation. Rows were styled as clickable and were not. */
+  onSelectClaim?: (claimId: number) => void;
+}) {
   const [claims, setClaims] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchRecent = async () => {
-      try {
-        const data = await getClaims({ limit: 8 });
-        setClaims(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
+    const load = async () => {
+      // Settled, not `all`: the recent-claims table and the KPI strip fail independently,
+      // and losing one should not blank the other.
+      const [recent, analytics] = await Promise.allSettled([
+        getClaims({ limit: 8 }),
+        getAnalytics(),
+      ]);
+      if (recent.status === "fulfilled") setClaims(recent.value);
+      else setError(recent.reason?.message ?? "Could not load recent investigations.");
+      if (analytics.status === "fulfilled") setStats(analytics.value);
+      setLoading(false);
     };
-    fetchRecent();
+    load();
   }, []);
+
+  const kpi = (pick: (k: any) => number) => (stats ? pick(stats.kpis) : "—");
+
+  const automationRate =
+    stats && stats.kpis.total_claims > 0
+      ? ((stats.kpis.total_claims - stats.kpis.manual_review_claims) /
+          stats.kpis.total_claims) *
+        100
+      : null;
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -75,15 +122,19 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => voi
         </motion.div>
       </div>
 
+      {/* Every tile here read from a string literal: "2.4s", "-120ms vs yesterday",
+          "76.4%", "14". They are now computed from GET /analytics. A claims product that
+          invents its own operating numbers is the same failure as one that invents a
+          verdict, just further from the eye. */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg Processing</span>
-            <Clock className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Claims Analysed</span>
+            <FileText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-          <div className="text-2xl font-bold tracking-tight">2.4s</div>
-          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-            <span className="text-emerald-500 font-medium">-120ms</span> vs yesterday
+          <div className="text-2xl font-bold tracking-tight">{kpi(k => k.total_claims)}</div>
+          <div className="text-xs text-muted-foreground mt-2">
+            {stats ? `${stats.kpis.supported_claims} supported · ${stats.kpis.contradicted_claims} contradicted` : "—"}
           </div>
         </motion.div>
 
@@ -92,9 +143,11 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => voi
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Automation Rate</span>
             <Activity className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-emerald-500">76.4%</div>
+          <div className="text-2xl font-bold tracking-tight text-emerald-500">
+            {automationRate === null ? "—" : `${automationRate.toFixed(1)}%`}
+          </div>
           <div className="text-xs text-muted-foreground mt-2">
-            No human intervention required
+            Resolved without human review
           </div>
         </motion.div>
 
@@ -103,7 +156,7 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => voi
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Manual Review</span>
             <ShieldCheck className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-amber-500">14</div>
+          <div className="text-2xl font-bold tracking-tight text-amber-500">{kpi(k => k.manual_review_claims)}</div>
           <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1 hover:text-foreground transition-colors">
             View queue <ArrowRight className="h-3 w-3" />
           </div>
@@ -111,10 +164,12 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => voi
 
         <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors cursor-pointer" onClick={() => onNavigate("analytics")}>
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active Agents</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg Confidence</span>
             <Zap className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
-          <div className="text-2xl font-bold tracking-tight">7</div>
+          <div className="text-2xl font-bold tracking-tight">
+            {stats ? `${stats.kpis.average_confidence}%` : "—"}
+          </div>
           <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1 hover:text-foreground transition-colors">
             View system metrics <ArrowRight className="h-3 w-3" />
           </div>
@@ -149,10 +204,19 @@ export function HomeDashboard({ onNavigate }: { onNavigate: (tab: string) => voi
               <div className="col-span-1 text-right">Escalated</div>
             </div>
             {claims.map((claim) => (
-              <div key={claim.id} className="grid grid-cols-12 gap-4 px-5 py-3 items-center text-sm hover:bg-muted/5 transition-colors cursor-pointer">
+              <div
+                key={claim.id}
+                onClick={() => onSelectClaim?.(claim.id)}
+                className="grid grid-cols-12 gap-4 px-5 py-3 items-center text-sm hover:bg-muted/5 transition-colors cursor-pointer"
+              >
                 <div className="col-span-2 flex flex-col">
                   <span className="font-mono text-xs">INV-{claim.id.toString().padStart(4, '0')}</span>
-                  <span className="text-xs text-muted-foreground">Just now</span>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={claim.created_at ? new Date(claim.created_at).toLocaleString() : ""}
+                  >
+                    {relativeTime(claim.created_at)}
+                  </span>
                 </div>
                 <div className="col-span-4 flex items-center gap-3">
                   <div className="h-8 w-8 rounded bg-muted/20 border border-border/50 flex items-center justify-center shrink-0">

@@ -1,0 +1,105 @@
+# AURELIX — API quota and resilience limits.
+#
+# Free-tier vs paid tier is a config change, not a code change.
+#
+# The `free` values below are what the Gemini API actually reported for this project.
+# Both were observed directly in 429 bodies during Phase 0/0.5 verification:
+#   GenerateRequestsPerMinutePerProjectPerModel-FreeTier  quotaValue: 5
+#   GenerateRequestsPerDayPerProjectPerModel-FreeTier     quotaValue: 20
+#
+# Read that daily figure again: **20 requests per day**. At the current 4 LLM calls per
+# claim that is FIVE CLAIMS PER DAY. The free tier cannot process the 44-claim batch at
+# all — not slowly, not at all. Collapsing 4 calls into 1 (Phase 2) raises the ceiling to
+# 20 claims/day, which is still below the batch size. A paid tier is required to run the
+# full dataset; see docs/PHASE_0.5_REPORT.md.
+#
+# The code previously assumed 15 RPM and tracked no daily budget at all.
+# Do not raise these without checking the live quota.
+
+active_tier: free
+
+# ─── Model ladder ────────────────────────────────────────────────────────────
+# Free-tier quota is PER MODEL, so each rung is a fresh daily budget rather than a
+# wall. Three free models is 60 requests/day at zero cost. Measured image cost:
+# gemini-3.6-flash charges 1089 tokens/image, the 2.5 family 258 -- irrelevant here
+# because tokens are nowhere near binding (a 12-claim batch is 2.8% of context).
+models:
+  primary: gemini-3.6-flash
+  chain:
+    - gemini-3.6-flash
+    - gemini-3.5-flash
+    - gemini-2.5-flash
+  # gemini-2.5-flash-lite is deliberately NOT in the chain: it returns 404 NOT_FOUND for
+  # this batched multimodal + response_schema request shape. Measured, not assumed --
+  # it failed all 13 times it was reached during the first benchmark run.
+
+# ─── Batching ────────────────────────────────────────────────────────────────
+# 44 claims / 3 per request = 15 requests, inside the 20 RPD budget with margin.
+# Do NOT raise max_claims_per_request to save quota: quota is not the scarce
+# resource, cross-claim isolation is. Raise it only if the isolation fixture in
+# tests/test_batch_isolation.py still passes at the higher value.
+batching:
+  max_claims_per_request: 3
+  max_images_per_request: 9
+  max_images_per_claim: 3
+  daily_request_reserve: 2      # keep this many requests unspent as headroom
+
+tiers:
+  free:
+    models:
+      gemini-3.6-flash:
+        rpm: 5
+        tpm: 250000
+        rpd: 20
+      gemini-2.5-flash:
+        rpm: 5
+        tpm: 250000
+        rpd: 20
+      gemini-3.5-flash:
+        rpm: 5
+        tpm: 250000
+        rpd: 20
+      gemini-2.5-flash-lite:
+        rpm: 10
+        tpm: 250000
+        rpd: 20
+    default:
+      rpm: 5
+      tpm: 250000
+      rpd: 20
+
+  paid:
+    models:
+      gemini-2.5-flash:
+        rpm: 1000
+        tpm: 1000000
+        rpd: 10000
+      gemini-2.5-flash-lite:
+        rpm: 4000
+        tpm: 4000000
+        rpd: 100000
+    default:
+      rpm: 1000
+      tpm: 1000000
+      rpd: 10000
+
+retry:
+  # Kept low on purpose. With a four-model ladder available, failing over to a healthy
+  # model beats retrying an overloaded one -- gemini-3.6-flash returned "high demand"
+  # 503s on every attempt during the first benchmark run, and four attempts per rung
+  # just delayed reaching a model that worked.
+  max_attempts: 2
+  base_delay_seconds: 1.0
+  max_delay_seconds: 32.0
+  # Only these are retried. 400/401/403 are bugs or bad credentials — fail fast, loudly.
+  retryable_status_codes: [429, 500, 502, 503, 504]
+
+circuit_breaker:
+  # After this many consecutive failures, stop hammering the API and fail fast.
+  failure_threshold: 5
+  cooldown_seconds: 60
+
+# The `evidence:` block is gone. It held `allow_text_only_inference`, which let the old
+# graph analyse a claim from its text when no image loaded. The batched pipeline never
+# asks: no usable image short-circuits to not_enough_information at preflight. See the
+# note in agent_core/services/config.py. `max_images_per_claim` lives under `batching`.

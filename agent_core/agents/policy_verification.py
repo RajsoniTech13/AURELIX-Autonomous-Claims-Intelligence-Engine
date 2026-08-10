@@ -21,6 +21,11 @@ def run_policy_verification_agent(
     """
     Check if submitted evidence meets policy requirements.
     Deterministic — no LLM call. Returns certainty='deterministic'.
+
+    Every outcome cites the stable `rule_id`s of the requirements it applied. Those ids come
+    from the `policy_rules` collection, which is chunked one document per requirement for
+    exactly this purpose: "EV-CAR-COUNT failed" is answerable to a claimant, "the car policy
+    failed" is not.
     """
     paths = [p.strip() for p in image_paths.split(";") if p.strip()]
     provided_count = len(paths)
@@ -53,6 +58,8 @@ def run_policy_verification_agent(
             policy_active=True,
         )
 
+    rule_prefix = f"EV-{(claim_object or 'UNKNOWN').strip().upper()}"
+
     # ── Required image count ──
     try:
         required_count = int(policy.get("required_image_count", 1))
@@ -68,6 +75,7 @@ def run_policy_verification_agent(
             required_images=required_count,
             provided_images=provided_count,
             policy_active=True,
+            rule_ids=[f"{rule_prefix}-COUNT"],
         )
 
     # ── Image validity check ──
@@ -81,6 +89,7 @@ def run_policy_verification_agent(
                 required_images=required_count,
                 provided_images=provided_count,
                 policy_active=True,
+                rule_ids=[f"{rule_prefix}-TYPE"],
             )
 
     # ── Visibility check ──
@@ -98,6 +107,7 @@ def run_policy_verification_agent(
                 required_images=required_count,
                 provided_images=provided_count,
                 policy_active=True,
+                rule_ids=[f"{rule_prefix}-VISIBILITY"],
             )
 
     # ── All checks passed ──
@@ -108,4 +118,5 @@ def run_policy_verification_agent(
         required_images=required_count,
         provided_images=provided_count,
         policy_active=True,
+        rule_ids=[f"{rule_prefix}-COUNT", f"{rule_prefix}-VISIBILITY"],
     )

@@ -6,11 +6,26 @@ import { Badge } from "@/components/ui/badge";
 import { getReviewQueue, submitVerdict } from "@/lib/api";
 import { 
   Loader2, Search, Filter, ShieldAlert, CheckCircle2, 
-  XCircle, AlertCircle, Clock, ChevronRight, User, Hash 
+  XCircle, AlertCircle, Clock, ChevronRight, User, Hash, FileSearch
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
-export function ReviewQueueTab() {
+/** Age of a queued claim. The column previously read a hardcoded "2h" for every row. */
+function age(iso?: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "—";
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+}
+
+export function ReviewQueueTab({
+  onSelectClaim,
+}: {
+  onSelectClaim?: (claimId: number) => void;
+} = {}) {
   const [queue, setQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +174,12 @@ export function ReviewQueueTab() {
                   </div>
 
                   <div className="w-[120px] flex items-center justify-end gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> 2h</span>
+                    <span
+                      className="flex items-center gap-1"
+                      title={claim.created_at ? new Date(claim.created_at).toLocaleString() : ""}
+                    >
+                      <Clock className="h-3 w-3" /> {age(claim.created_at)}
+                    </span>
                     <ChevronRight className={`h-4 w-4 transition-transform ${expandedId === claim.id ? "rotate-90" : ""}`} />
                   </div>
                 </div>
@@ -186,7 +206,16 @@ export function ReviewQueueTab() {
                     </div>
                     
                     <div className="w-[200px] shrink-0 border-l border-border/50 pl-6 flex flex-col gap-2 justify-end">
-                      <Button 
+                      {/* A reviewer being asked to approve or reject needs the per-agent
+                          trail the verdict came from, not just its summary sentence. */}
+                      <Button
+                        variant="ghost"
+                        onClick={() => onSelectClaim?.(claim.id)}
+                        className="w-full gap-2 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FileSearch className="h-3.5 w-3.5" /> Open full investigation
+                      </Button>
+                      <Button
                         disabled={processingId === claim.id}
                         onClick={() => handleVerdict(claim.id, "approved")}
                         className="w-full gap-2 bg-emerald-500 hover:bg-emerald-600 text-emerald-950 font-semibold shadow-sm"

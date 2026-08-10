@@ -8,6 +8,7 @@ import {
   GitMerge, GitPullRequest, GitCommit, FileText, Zap, MessageSquare, Bot
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { assetUrl } from "@/lib/api";
 
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
@@ -105,7 +106,7 @@ export function ClaimReviewTab({ claim }: { claim: any }) {
                   <div className="flex flex-wrap gap-2 pt-2">
                     {imagePaths.map((path: string, i: number) => (
                       <div key={i} className="h-24 rounded border border-border/50 overflow-hidden">
-                        <img src={`http://127.0.0.1:8000/${path}`} alt="Evidence" className="h-full object-cover" />
+                        <img src={assetUrl(path)} alt="Evidence" className="h-full object-cover" />
                       </div>
                     ))}
                   </div>

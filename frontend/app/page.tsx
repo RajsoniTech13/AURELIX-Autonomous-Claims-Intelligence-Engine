@@ -3,24 +3,41 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  ShieldCheck, PlusCircle, Search, 
-  FileText, Activity, Settings, Bell, User, 
-  Database, Zap, Clock, ChevronLeft, ChevronRight, Pin, History
+  ShieldCheck, PlusCircle, Search,
+  FileText, Activity, Settings, Bell, User,
+  Zap, ChevronLeft, ChevronRight, Pin, History
 } from "lucide-react";
 import { SubmitClaimTab } from "@/components/dashboard/SubmitClaimTab";
 import { ClaimReviewTab } from "@/components/dashboard/ClaimReviewTab";
 import { ReviewQueueTab } from "@/components/dashboard/ReviewQueueTab";
 import { AnalyticsTab } from "@/components/dashboard/AnalyticsTab";
 import { HomeDashboard } from "@/components/dashboard/HomeDashboard";
+import { SystemHealth } from "@/components/dashboard/SystemHealth";
+import { getClaim } from "@/lib/api";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const handleClaimSubmitted = (claim: any) => {
     setSelectedClaim(claim);
     setActiveTab("review");
+  };
+
+  // Opening a claim from a list has to re-fetch it: list endpoints return `ClaimSchema`,
+  // which carries the verdict but not `audit_logs`. Handing the list row straight to the
+  // review tab renders an investigation with an empty agent timeline — the one thing that
+  // screen exists to show.
+  const handleSelectClaim = async (claimId: number) => {
+    setActiveTab("review");
+    setSelectedClaim(null);
+    try {
+      setSelectedClaim(await getClaim(claimId));
+    } catch (e: any) {
+      setClaimError(e?.message ?? "Could not load that investigation.");
+    }
   };
 
   const navGroups = [
@@ -146,22 +163,12 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center space-x-4">
-            {/* System Health Indicators */}
-            <div className="hidden lg:flex items-center space-x-3 border-r border-border/50 pr-4">
-              <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-                <Activity className="h-3 w-3 text-emerald-500" />
-                Gemini: <span className="text-emerald-500 font-mono">100%</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-                <Database className="h-3 w-3 text-emerald-500" />
-                Redis: <span className="text-foreground font-mono">2ms</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-                <Clock className="h-3 w-3 text-emerald-500" />
-                API: <span className="text-foreground font-mono">14ms</span>
-              </div>
-            </div>
-            
+            {/* System health — measured, not decorative.
+                These read "Gemini: 100%", "Redis: 2ms", "API: 14ms" as hardcoded strings.
+                A status indicator that reports health it never checked is worse than no
+                indicator: it says "green" while the backend is down. */}
+            <SystemHealth />
+
             <button className="relative text-muted-foreground hover:text-foreground transition-colors">
               <Bell className="h-4 w-4" />
               <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
@@ -184,10 +191,21 @@ export default function Dashboard() {
               className="min-h-full p-4 lg:p-6"
             >
               <div className="max-w-[1400px] mx-auto">
-                {activeTab === "overview" && <HomeDashboard onNavigate={setActiveTab} />}
+                {activeTab === "overview" && (
+                  <HomeDashboard onNavigate={setActiveTab} onSelectClaim={handleSelectClaim} />
+                )}
                 {activeTab === "submit" && <SubmitClaimTab onClaimSubmitted={handleClaimSubmitted} />}
-                {activeTab === "review" && <ClaimReviewTab claim={selectedClaim} />}
-                {activeTab === "queue" && <ReviewQueueTab />}
+                {activeTab === "review" && (
+                  <>
+                    {claimError && (
+                      <div className="mb-4 p-4 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-sm">
+                        {claimError}
+                      </div>
+                    )}
+                    <ClaimReviewTab claim={selectedClaim} />
+                  </>
+                )}
+                {activeTab === "queue" && <ReviewQueueTab onSelectClaim={handleSelectClaim} />}
                 {activeTab === "analytics" && <AnalyticsTab />}
                 
                 {["pinned", "recent", "settings"].includes(activeTab) && (

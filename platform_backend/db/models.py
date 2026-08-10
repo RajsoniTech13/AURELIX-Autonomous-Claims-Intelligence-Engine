@@ -68,3 +68,44 @@ class AuditLog(Base):
     reasoning = Column(Text, nullable=True)
     
     claim = relationship("Claim", back_populates="audit_logs")
+
+
+class Job(Base):
+    """
+    One submitted claim's analysis, tracked as a job rather than a blocked HTTP request.
+
+    Analysing a claim takes as long as the model takes — measured at ~14 seconds. Holding a
+    worker open for that means concurrency is bounded by worker count, a slow model becomes
+    a site outage, and any client timeout loses work that has already been paid for out of a
+    20-request daily budget. So submission returns 202 with a job id, and the result is
+    collected by polling or by an event stream.
+
+    The job row is also the progress channel: the runner writes each pipeline stage here as
+    it completes, and the SSE endpoint reads it. That is deliberately boring — no broker, no
+    pub/sub — because the state has to survive a client reconnecting anyway, which means it
+    has to be durable, which means the database is already the right place for it.
+    """
+    __tablename__ = "jobs"
+
+    id = Column(String(36), primary_key=True, index=True)          # uuid4
+    user_id = Column(String(50), nullable=False, index=True)
+
+    # queued -> running -> succeeded | failed
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    stage = Column(String(50), nullable=True)                      # last completed stage
+    progress = Column(JSON, nullable=True)                         # [{stage, status, at}]
+
+    claim_id = Column(Integer, ForeignKey("claims.id"), nullable=True)
+    error = Column(Text, nullable=True)
+
+    # Idempotency-Key, scoped per user. A retried submission must not spend a second
+    # request out of the daily budget, and must not create a second claim record.
+    idempotency_key = Column(String(255), nullable=True, index=True)
+
+    submitted_payload = Column(JSON, nullable=True)                # what was asked for
+    created_at = Column(DateTime, default=get_utc_now, index=True)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    claim = relationship("Claim")

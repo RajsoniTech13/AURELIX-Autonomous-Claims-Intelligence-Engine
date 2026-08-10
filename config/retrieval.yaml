@@ -1,0 +1,85 @@
+# AURELIX — retrieval and duplicate-image detection.
+
+version: 1
+
+# ── Duplicate image detection ───────────────────────────────────────────────
+#
+# A photograph already submitted under a different claim is the strongest objective
+# fraud signal in this domain. Everything else in the fraud score is inference; this
+# is a fact. It is also an accusation, so the thresholds are set to be wrong in the
+# safe direction.
+#
+# Two tiers, because they carry different evidential weight:
+#
+#   exact  — identical bytes. Unambiguous, zero false positives by construction,
+#            no threshold to argue about.
+#   near   — perceptually the same image after re-encoding, resizing, a brightness
+#            change or a light crop. This is what actually happens when a claimant
+#            forwards a photo through a messaging app.
+#
+# ── Where the near-duplicate numbers come from ──────────────────────────────
+# Measured on the real photographs in tests/fixtures/images. Bit distances between
+# an image and a transformed copy of itself (pHash / dHash):
+#
+#                     jpeg q55   resize 50%   crop 4%   bright +-20%
+#   car_damage.jpg       0/0        0/0        10/5        2/0
+#   cat.jpg              0/0        0/0        12/8        2/1
+#
+# and between *different* photographs — the false-positive risk:
+#
+#   car_damage vs cat        pHash 26   dHash 30
+#   car_damage vs blurred    pHash 24   dHash 35
+#   (minimum over all genuine pairs: pHash 24, dHash 18)
+#
+# So the thresholds below sit roughly midway, with both hashes required to agree.
+# Requiring agreement matters: pHash and dHash fail differently, and a single-hash
+# rule inherits the worse of the two failure modes.
+#
+# ── The one image class this cannot handle ──────────────────────────────────
+# blurred.jpg (Laplacian variance 0.6) moves 22 pHash bits under nothing worse than
+# a JPEG re-encode: a near-featureless image has DCT coefficients clustered around
+# the median, so trivial perturbations flip many bits. It is excluded from the index
+# for free -- the Phase 4.1 quality gate already rates it `unusable`, and only images
+# that pass the gate are indexed. The gate is a precondition of this feature working,
+# not merely a neighbour of it.
+duplicate_detection:
+  enabled: true
+
+  # Perceptual matching. Both distances must be at or below their limit.
+  near_duplicate:
+    enabled: true
+    max_phash_distance: 12
+    max_dhash_distance: 10
+
+  # A claim may legitimately attach the same photograph twice; that is not reuse.
+  # A match under a *different* claim id is, even when the claimant is the same
+  # person -- resubmitting last year's damage as a new incident is the textbook case.
+  ignore_same_claim: true
+
+  # Only index and query images the quality gate accepted. See the note above.
+  require_quality: [good, fair, poor]
+
+# ── Hybrid text retrieval ───────────────────────────────────────────────────
+# Dense and sparse arms fused with Reciprocal Rank Fusion. RRF is used rather than a
+# weighted score blend because the two arms produce scores on incomparable scales
+# (cosine similarity vs BM25), and normalising them introduces a tuning parameter
+# that has to be re-fitted whenever the corpus changes. RRF only needs the ranks.
+hybrid:
+  rrf_k: 60               # standard damping constant; larger = flatter rank weighting
+  top_k: 5
+  candidates_per_arm: 20
+
+  dense:
+    # Latent semantic indexing over TF-IDF: a truncated SVD, computed with numpy.
+    # This is a genuine dense arm -- it retrieves on co-occurrence rather than exact
+    # term overlap -- but it is NOT a transformer embedding, and it should not be
+    # described as one. A Gemini-embedding backend implements the same interface and
+    # is left switched off: it would spend request quota, which the brief forbids
+    # without explicit approval.
+    backend: lsa
+    components: 64
+    min_df: 1
+
+  # Never compare a laptop claim against a car claim, however similar the wording.
+  # Applied before scoring, not as a post-filter, so the top-k is k useful results.
+  metadata_filters: [object_category]

@@ -1,6 +1,28 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+class UTCTimestamps(BaseModel):
+    """
+    Emit datetimes as unambiguous UTC.
+
+    Every timestamp in this database is naive UTC (`datetime.now(timezone.utc)` with the
+    tzinfo stripped, so SQLite stores something comparable). Serialised as-is that produces
+    `2026-08-10T01:39:22`, and ECMAScript reads a date-time with no offset as **local
+    time** — so a claim analysed a minute ago rendered hours in the future for anyone east
+    of UTC, and every relative-time label in the UI was wrong by the reader's own offset.
+
+    Appending the offset costs nothing and removes the guess.
+    """
+
+    @field_serializer("created_at", "updated_at", "timestamp", check_fields=False)
+    def _as_utc(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        aware = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        return aware.isoformat()
+
 
 class ClaimBase(BaseModel):
     user_id: str
@@ -11,7 +33,7 @@ class ClaimBase(BaseModel):
 class ClaimCreate(ClaimBase):
     pass
 
-class AuditLogSchema(BaseModel):
+class AuditLogSchema(UTCTimestamps):
     id: int
     agent_name: str
     timestamp: datetime
@@ -22,7 +44,7 @@ class AuditLogSchema(BaseModel):
     class Config:
         from_attributes = True
 
-class ClaimSchema(ClaimBase):
+class ClaimSchema(ClaimBase, UTCTimestamps):
     id: int
     # Policy
     policy_status: Optional[str] = None

@@ -8,8 +8,6 @@ import csv
 import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
-from PIL import Image
-import io
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -22,7 +20,7 @@ from platform_backend.models.schemas import (
     ObjectDistribution, SeverityDistribution, ConfidenceBucket, FraudBucket
 )
 from platform_backend.services.cache import get_cached_result, set_cached_result
-from agent_core import process_claim
+from platform_backend.services.uploads import read_uploads
 
 router = APIRouter()
 
@@ -114,29 +112,14 @@ def submit_claim(claim_in: ClaimCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/claims/submit-multimodal", response_model=ClaimDetailSchema)
-def submit_claim_multimodal(
+async def submit_claim_multimodal(
     user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
     files: List[UploadFile] = File([]),
     db: Session = Depends(get_db)
 ):
-    pil_images = []
-    file_names = []
-    for f in files:
-        if not f.filename: continue
-        try:
-            content = f.file.read()
-            img = Image.open(io.BytesIO(content))
-            img.verify()
-            f.file.seek(0)
-            img = Image.open(io.BytesIO(f.file.read()))
-            pil_images.append(img)
-            file_names.append(f.filename)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image file {f.filename}: {str(e)}")
-
-    image_paths_str = ";".join([f"uploads/{name}" for name in file_names]) if file_names else "none"
+    pil_images, image_paths_str = await read_uploads(files)
 
     load_lookups_if_empty()
     u_history = user_history_lookup.get(user_id)
@@ -168,23 +151,8 @@ async def submit_claim_multimodal_stream(
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import StreamingResponse
-    
-    pil_images = []
-    file_names = []
-    for f in files:
-        if not f.filename: continue
-        try:
-            content = await f.read()
-            img = Image.open(io.BytesIO(content))
-            img.verify()
-            f.file.seek(0)
-            img = Image.open(io.BytesIO(await f.read()))
-            pil_images.append(img)
-            file_names.append(f.filename)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image file {f.filename}: {str(e)}")
 
-    image_paths_str = ";".join([f"uploads/{name}" for name in file_names]) if file_names else "none"
+    pil_images, image_paths_str = await read_uploads(files)
 
     load_lookups_if_empty()
     u_history = user_history_lookup.get(user_id)

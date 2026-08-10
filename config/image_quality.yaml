@@ -1,0 +1,62 @@
+# AURELIX — deterministic image-quality gate.
+#
+# These thresholds decide whether a photograph is good enough to assess damage from.
+# They run in preflight, before any LLM call, and they OVERRIDE the model's own
+# self-reported quality — but only downwards. See agents/image_quality.py for why.
+#
+# ── Provenance ──────────────────────────────────────────────────────────────
+# Every number below was chosen from a measured distribution over the 49 images of
+# the synthetic evaluation set, not by taste. Laplacian variance, per image:
+#
+#   SYN-031 (labelled very_blurry)   0.6      <- the only genuinely blurred image
+#   SYN-036 (labelled good)         19.8      <- lowest-variance *undegraded* image
+#   SYN-035 (labelled good)         22.7
+#   ... 45 further images            41 - 1669
+#
+# So the blur bands sit in the empty corridor between 0.6 and 19.8. Mean luminance:
+#
+#   SYN-032 (labelled dark)         40.6  (p95  47)
+#   SYN-034 (labelled good-ish)    133.1  (p95 214)   <- darkest undegraded image
+#
+# giving the same kind of corridor for exposure.
+#
+# ── Calibration warning ─────────────────────────────────────────────────────
+# The synthetic set is flat vector illustration. Real photographs carry sensor noise,
+# texture and film grain, all of which raise Laplacian variance substantially — the
+# commonly cited blur threshold for natural photographs is ~100, an order of magnitude
+# above `poor_below` here. **These values must be re-derived against a real photo set
+# before this gate is trusted on real claims.** They are correct for the data we have
+# and are not a claim about data we do not have.
+
+version: 1
+
+blur:
+  # Variance of the Laplacian over the greyscale image. Low variance = few sharp
+  # edges = out of focus or motion blurred.
+  unusable_below: 8.0
+  poor_below: 15.0
+
+exposure:
+  too_dark:
+    # Both conditions must hold: a dark *subject* correctly exposed still has bright
+    # highlights, so p95 is what separates "dark scene" from "underexposed frame".
+    unusable_mean_below: 70.0
+    unusable_p95_below: 120.0
+    poor_mean_below: 95.0
+  too_bright:
+    # Symmetric. p05 catches a frame where even the shadows are blown out.
+    unusable_mean_above: 235.0
+    unusable_p05_above: 200.0
+    poor_mean_above: 215.0
+
+resolution:
+  # Hard rejection below 200x200 already happens in image_validator; this is the
+  # softer band where an image is readable but too small to judge fine damage.
+  poor_min_side_below: 400
+
+# Numeric score attached to each band, on the same 0-100 scale the model reports.
+scores:
+  good: 90
+  fair: 70
+  poor: 35
+  unusable: 10

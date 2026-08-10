@@ -1,131 +1,134 @@
 # AURELIX — Autonomous Trust Intelligence for Damage Claims
 
-AURELIX is a production-grade, multi-agent AI claims intelligence engine designed for modern insurance, warranty, and logistics providers. It leverages **LangGraph**, **Gemini 2.5 Flash**, **Gemini Vision**, and **Deterministic Rule Engines** to verify claims, check evidence compliance, calculate fraud risks, and provide explainable decisions.
+A multi-agent claims verification engine. A claimant describes what happened and attaches
+photographs; AURELIX decides whether the evidence **supports**, **contradicts**, or is
+**insufficient** for the claim, and says which rule made that call.
 
-The architecture is split into a **3-tier modular system** to serve two environments from a single, unified AI reasoning codebase:
-1. **HackerRank Orchestrate CLI Mode**: Standalone Python package for batch evaluation without web or DB overhead.
-2. **Production SaaS Platform Mode**: High-performance FastAPI backend gateway connected to a Next.js dashboard, PostgreSQL/SQLite, Redis caching, and human-in-the-loop queues.
+Two front doors, one reasoning path: a batch CLI for evaluation, and a FastAPI + Next.js
+platform for a person submitting a single claim. Both run the same perception and the same
+deterministic judgement — deliberately, so the benchmark measures what production does.
 
----
-
-## 🛠️ Technology Stack
-
-* **AI Engine**: LangGraph, Gemini 2.5 Flash (via `google-genai` SDK)
-* **API Gateway**: FastAPI (Python), SQLAlchemy, SQLite / PostgreSQL
-* **Caching**: Redis
-* **Frontend**: Next.js (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
-* **Retrieval (RAG)**: Cosine Similarity TF-IDF search index
+**Runs permanently within the Gemini free tier.** That is an architectural constraint, not
+a cost preference, and it shaped most of what follows.
 
 ---
 
-## 📂 Project Structure
+## How a claim is decided
+
+One multimodal model call, then arithmetic:
 
 ```
-aurelix/
-├── agent_core/             # Main AI reasoning engine package (shared by SaaS & CLI)
-│   ├── agents/             # 7 specialized AI agents
-│   ├── orchestrator/       # LangGraph graph topology & process_claim API
-│   ├── prompts/            # Centralized prompt templates
-│   ├── schemas/            # Pydantic serialization models
-│   ├── services/           # Decoupled LLM and Vector Store services
-│   ├── evaluation/         # System metrics calculation scripts
-│   ├── data/               # Local database (claims, rules, ground truth)
-│   └── main.py             # CLI runner: CSV -> process_claim() -> output.csv
-│
-├── platform_backend/       # FastAPI gateway web server (imports from agent_core)
-│   ├── api/routes.py       # API routes forwarding requests to agent_core
-│   ├── db/                 # DB models and Session manager
-│   ├── models/schemas.py   # Request/Response validation schemas
-│   ├── services/cache.py   # Redis caching layer
-│   └── main.py             # FastAPI gate entrypoint
-│
-└── frontend/               # Next.js SaaS Web Application
+preflight            deterministic — decode, measure blur/exposure, reject unusable images
+duplicate_check      deterministic — perceptual hash against every photograph ever submitted
+perception           ONE Gemini call — what is in the images, what does the claimant assert
+policy_verification  deterministic — evidence requirements, cited by rule_id
+user_risk            deterministic — claim history, velocity
+alignment            deterministic — claimed part vs observed part, severity delta
+decision             deterministic — fraud score, confidence, ordered rules
 ```
 
----
+**Only `perception` reaches the network.** The model reports observations; it never computes
+the fraud score, the confidence, or the verdict. Those are ordinary Python with a `rule_id`
+in the justification, which is why a verdict can be re-derived from stored perception at no
+API cost — and why the reasoning survives review.
 
-## 🚀 Running the Platform Locally
+A failure never becomes a verdict. If perception is unavailable — quota exhausted, malformed
+response — the claim returns `not_enough_information` with the cause attached, rather than a
+guess dressed as a finding.
 
-### Option A: HackerRank CLI Mode (Standalone AI Engine)
+## What is measured
 
-1. **Activate Environment & Install requirements**:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   pip install -r agent_core/requirements.txt
-   ```
-2. **Configure Environment Variables**:
-   Create a `.env` file in the project root:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-3. **Execute CLI**:
-   ```bash
-   python agent_core/main.py
-   ```
+| | |
+|---|---|
+| Accuracy | **93.2%** on 44 cases, macro-F1 93.2% |
+| Requests per claim | **1** |
+| Latency | ~9s (up to ~185s under per-minute backoff near the daily cap) |
+| Tests | **254**, hermetic — no live API calls |
 
-### Option B: Production SaaS Mode (Web App)
-
-1. **Install Dependencies**:
-   ```bash
-   pip install -r agent_core/requirements.txt -r platform_backend/requirements.txt
-   cd frontend && npm install
-   ```
-2. **Start FastAPI Gateway**:
-   ```bash
-   ./venv/bin/python -m uvicorn platform_backend.main:app --host 127.0.0.1 --port 8000
-   ```
-3. **Start Next.js Frontend**:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-4. **Access UI**: Open [http://localhost:3000](http://localhost:3000)
+The 44 cases are **synthetic renders**, clearly labelled as such, with ground truth held
+separate from anything sent to the model. That accuracy is not an estimate for real
+photographs: the set has no lighting, reflection, occlusion or blur variance.
 
 ---
 
-## 🤖 Coordinated AI Claims Pipeline
+## Layout
 
-Each claim undergoes a parallel 7-agent validation graph orchestrated by LangGraph:
-1. **Image Validator**: Fast fail-safe to check image integrity and metadata before LLM inference.
-2. **Claim Ingestion Agent**: Parses unstructured user descriptions into structured JSON.
-3. **Vision Analysis Agent**: Multimodal Gemini reasoning over submitted images to detect physical damage severity.
-4. **Policy Verification Agent**: Validates evidence against the SLA guidebook.
-5. **Similar Claims Agent**: TF-IDF similarity search to fetch historical repair estimates.
-6. **User Risk Agent**: Checks claimant history for fraud flags and velocity limits.
-7. **Fraud Review & Decision Agents**: Aggregates all branch signals to compute a final confidence score, justification, and manual review escalation requirement.
-
----
-
-## 🐳 Deployment (Docker & Render/Vercel)
-
-### 1. Backend (Render / Fly.io / AWS)
-A `Dockerfile` is provided for the FastAPI + LangGraph backend.
-
-```dockerfile
-# Dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY agent_core/ agent_core/
-COPY platform_backend/ platform_backend/
-RUN pip install -r agent_core/requirements.txt -r platform_backend/requirements.txt
-ENV PYTHONPATH=/app
-CMD ["uvicorn", "platform_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+agent_core/           the reasoning engine — shared by both front doors
+  agents/             perception (LLM) + alignment, policy, user_risk, image_quality (not)
+  retrieval/          hybrid BM25 + dense with RRF fusion; perceptual image index
+  rules_engine.py     the ordered rules that produce a verdict
+  service.py          analyse_claim_events() — the single entry point
+platform_backend/     FastAPI: claims, review queue, analytics, async jobs
+frontend/             Next.js dashboard — submit, live trace, investigation, queue
+config/               every threshold and magic number
+docs/                 architecture, audit, per-phase reports, deployment
 ```
 
-To build and run locally:
+## Running it
+
 ```bash
-docker build -t aurelix-backend .
-docker run -p 8000:8000 -e GEMINI_API_KEY=your_key aurelix-backend
+cp .env.example .env                          # add GEMINI_API_KEY
+python -m venv venv && ./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m agent_core.tools.build_index    # offline, costs nothing
+./venv/bin/python -m uvicorn platform_backend.main:app --reload --port 8000
 ```
 
-### 2. Frontend (Vercel)
-The Next.js frontend is optimized for zero-config Vercel deployment.
-1. Connect your GitHub repository to Vercel.
-2. Set the Root Directory to `frontend`.
-3. Set the build command to `npm run build`.
-4. Ensure `NEXT_PUBLIC_API_URL` is set to your deployed backend URL.
+```bash
+cd frontend
+cp .env.example .env.local                    # defaults to http://127.0.0.1:8000
+npm install && npm run dev                    # http://localhost:3000
+```
 
-### 3. Database
-- By default, it uses a local SQLite database (`aurelix.db`).
-- For production, set the `DATABASE_URL` environment variable to a PostgreSQL connection string (e.g., Neon Serverless Postgres). SQLAlchemy will automatically map all models.
+```bash
+./venv/bin/python -m pytest                              # 254 tests
+./venv/bin/python -m agent_core.evaluation.evaluate_synthetic   # re-scores stored perception
+```
+
+Batch mode over a CSV:
+
+```bash
+./venv/bin/python -m agent_core.run_pipeline
+```
+
+## Deploying
+
+Backend on Render, frontend on Vercel, both free tier —
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. `render.yaml` is a ready blueprint. The order
+matters: each side needs the other's URL, and the frontend bakes its copy in at build time.
+
+---
+
+## Constraints worth knowing before reading the code
+
+- **The output contract is frozen.** `agent_core/output/output.csv` column names, order and
+  value vocabulary are a locked public schema with a golden-file test. If it fails, the code
+  is wrong.
+- **20 model requests per day**, per project per model, resetting at midnight *Pacific*.
+  Rotating keys does not reset it. Request count is the only scarce resource here — image
+  resolution is not, since image tokens are flat with respect to it.
+- **No LangGraph.** It orchestrated a ten-node graph with four LLM calls per claim. That
+  pipeline is now one call followed by straight-line Python, and a graph framework with
+  nothing to branch on is a dependency, not an architecture. Removed in Phase 4.3; the
+  measurement that it *did* run parallel edges concurrently still stands in
+  `docs/ARCHITECTURE.md`.
+
+## Known gaps
+
+- **No authentication.** `user_id` is a form field; anyone can submit as anyone and read any
+  claim by id. Highest-priority remaining work.
+- **Ephemeral storage on free tier.** SQLite and uploaded photographs do not survive a
+  redeploy. `DATABASE_URL` and `services/uploads.save_image` are the two seams.
+- **No Docker, no Alembic.** Schema changes still go through `create_all`.
+- Two submission contracts coexist during migration — the blocking one the UI uses, and the
+  v1 async 202/poll/SSE one.
+
+## Documentation
+
+| | |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | the design and the measurements behind it |
+| [FREE_TIER_DESIGN.md](docs/FREE_TIER_DESIGN.md) | how one request per claim is achieved |
+| [AUDIT.md](docs/AUDIT.md) | what was wrong, found by measurement |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render + Vercel |
+| `docs/PHASE_*_REPORT.md` | what changed each phase, and what was left unverified |

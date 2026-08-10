@@ -1,0 +1,65 @@
+# Render blueprint for the AURELIX API.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repository.
+# The one value that is not set here is GEMINI_API_KEY; `sync: false` makes Render prompt
+# for it instead, so the key is never committed.
+#
+# Free-tier realities, stated rather than discovered:
+#
+#   * The instance **sleeps after ~15 minutes idle** and takes ~50s to wake. The frontend
+#     says so in its error text rather than showing "Failed to fetch".
+#   * The disk is **ephemeral**. SQLite and uploaded photographs survive restarts within a
+#     deploy and are wiped by the next one. Point DATABASE_URL at Postgres and swap
+#     `services/uploads.save_image` for object storage when that stops being acceptable.
+#   * One worker. Analysis is ~12s of mostly-waiting, and the real ceiling is Gemini's
+#     free-tier 5 requests/minute, not CPU — see docs/FREE_TIER_DESIGN.md.
+
+services:
+  - type: web
+    name: aurelix-api
+    runtime: python
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      # The retrieval index is built offline and only loaded at boot. It lives under
+      # .aurelix/, which is gitignored local run state, so it has to be built here.
+      # Costs no API requests.
+      python -m agent_core.tools.build_index
+
+    # One worker on purpose. The blocking SSE route holds a worker for the length of the
+    # analysis, and a second worker on 0.1 CPU would contend rather than help. Concurrency
+    # belongs to the v1 job pool.
+    startCommand: uvicorn platform_backend.main:app --host 0.0.0.0 --port $PORT --workers 1
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+
+      # Prompted at deploy time, never stored in git.
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Set this to the Vercel production URL once the frontend is deployed. Leaving it at
+      # `*` works but disables credentialed requests — see the CORS note in main.py.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Vercel preview deployments get a new hostname on every push, so they cannot be
+      # enumerated. This admits them without opening the API to everything.
+      - key: CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+
+      - key: DATABASE_URL
+        value: sqlite:///./aurelix.db
+      - key: UPLOAD_DIR
+        value: /opt/render/project/src/var/uploads
+      - key: MAX_UPLOAD_BYTES
+        value: "8388608"
+      - key: MAX_UPLOAD_FILES
+        value: "6"
+      - key: PYTHONUNBUFFERED
+        value: "1"

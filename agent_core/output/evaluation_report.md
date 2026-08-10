@@ -1,68 +1,67 @@
-# AURELIX claims Verification Platform - Evaluation Report
+# AURELIX — Evaluation Report (synthetic benchmark)
 
-This report presents accuracy, precision, recall, and F1 metrics for AURELIX's multi-agent claims verification system, alongside cost and latency profiles.
+> **SYNTHETIC DEVELOPMENT/EVALUATION DATA.** Every claim narrative is invented and
+> every image is a procedurally generated illustration. These figures measure the
+> pipeline against known labels; they are **not** a prediction of accuracy on real
+> claim photographs, which bring lighting, occlusion, reflections and motion blur
+> that this set does not contain.
 
----
+- Ground truth: `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/data/synthetic/ground_truth.csv`
+- Predictions: `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/output/results_detail.json`
 
-## 1. Classification Performance Metrics
+## Headline
 
-The evaluation compares predictions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/output/validation_output.csv` with the baseline decisions in `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/data/sample_claims.csv` across 20 matching user-claim profiles.
+| metric | value |
+| :--- | ---: |
+| Cases scored | 44 / 44 |
+| **Accuracy** | **93.2%** |
+| Macro F1 | 93.2% |
+| Weighted F1 | 93.2% |
+| Mean confidence | 70 |
+| Mean fraud score | 20 |
 
-### Core Metrics Summary
+## Per class
 
-| Metric | Score | Matches | Total |
-| :--- | :--- | :--- | :--- |
-| **Claim Verdict (Status) Accuracy** | **100.00%** | 20 | 20 |
-| **Severity Classification Accuracy** | **100.00%** | 20 | 20 |
-| **Evidence Compliance Match Accuracy** | **100.00%** | 20 | 20 |
+| class | support | TP | FP | FN | precision | recall | F1 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| supported | 19 | 18 | 1 | 1 | 94.7% | 94.7% | 94.7% |
+| contradicted | 18 | 16 | 1 | 2 | 94.1% | 88.9% | 91.4% |
+| not_enough_information | 7 | 7 | 1 | 0 | 87.5% | 100.0% | 93.3% |
 
-### Metrics by Decision Class
+## Confusion matrix
 
-| Decision Class | True Positives (TP) | False Positives (FP) | False Negatives (FN) | Precision | Recall | F1 Score |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Supported** | 13 | 0 | 0 | 100.0% | 100.0% | 100.0% |
-| **Contradicted** | 4 | 0 | 0 | 100.0% | 100.0% | 100.0% |
-| **Not Enough Info** | 3 | 0 | 0 | 100.0% | 100.0% | 100.0% |
+Rows are ground truth, columns are predictions.
 
-### Overall Macro Averages
-- **Macro Precision**: 100.00%
-- **Macro Recall**: 100.00%
-- **Macro F1 Score**: 100.00%
+| actual \ predicted | supported | contradicted | not_enough_information |
+| :--- | ---: | ---: | ---: |
+| **supported** | 18 | 1 | 0 |
+| **contradicted** | 1 | 16 | 1 |
+| **not_enough_information** | 0 | 0 | 7 |
 
----
+## By failure category
 
-## 2. Operational & Cost Analysis
+The number that matters: aggregate accuracy hides which specific failure mode is broken.
 
-### Ingestion Performance & Latency
-- **Total Ingested Claims**: 44
-- **Total Agent Node Runs**: 396 (9 agents * 44 claims)
-- **Average Ingest Latency**: ~0.08 seconds per claim (Mock/Fallback mode), ~2.4 seconds per claim (Live LLM mode)
-- **Cumulative Batch Runtime**: ~3.5 seconds total runtime (Mock/Fallback mode)
+| category | correct | total | rate |
+| :--- | ---: | ---: | ---: |
+| adjacent_part | 3 | 3 | 100% |
+| injection | 1 | 1 | 100% |
+| injection_mismatch | 1 | 1 | 100% |
+| match | 13 | 14 | 93% |
+| no_damage | 2 | 2 | 100% |
+| part_mismatch | 6 | 7 | 86% |
+| part_not_visible | 3 | 3 | 100% |
+| poor_image | 4 | 4 | 100% |
+| severity_inflation | 4 | 5 | 80% |
+| severity_overstatement | 1 | 1 | 100% |
+| wrong_object | 2 | 2 | 100% |
+| wrong_object_document | 1 | 1 | 100% |
 
-### Token Usage & API Cost Analysis (Projected for Live LLM Mode)
-- **Model**: `gpt-4o-mini` (for intake, quality, vision, fraud, and decision nodes)
-- **Average Prompt Tokens per Claim**: ~1,800 tokens
-- **Average Completion Tokens per Claim**: ~350 tokens
-- **Pricing Assumptions**: 
-  - Input: $0.150 per 1M tokens
-  - Output: $0.600 per 1M tokens
-- **Token Costs Calculation**:
-  - Input Cost per Claim: 1,800 * $0.00000015 = $0.00027
-  - Output Cost per Claim: 350 * $0.0000006 = $0.00021
-  - **Total Cost per Claim**: **$0.00048** (less than 1/20th of a cent)
-  - **Batch Ingest Cost (44 Claims)**: **$0.02112** (approx. 2 cents)
+## Notable failures
 
----
+| claim | category | expected | got | part_match | object_match | Δsev | observed | rules |
+| :--- | :--- | :--- | :--- | :--- | :--- | ---: | :--- | :--- |
+| SYN-014 | match | supported | contradicted | mismatch | match | None | quarter_panel | R040_part_mismatch,FRAUD:part_mismatch_with_damage_elsewhere |
+| SYN-021 | part_mismatch | contradicted | not_enough_information | not_visible | match | None | rear_bumper | R020_claimed_part_not_visible |
+| SYN-029 | severity_inflation | contradicted | supported | exact | match | 1 | door | R050_supported_with_overstatement |
 
-## 3. High-Load Production Strategies
-
-### Rate Limit Strategy
-- **Token Bucket Limiting**: The system implements an asynchronous request queue to cap model requests at 10,000 Tokens Per Minute (TPM) and 200 Requests Per Minute (RPM) in line with standard OpenAI tier-1 thresholds.
-- **Exponential Backoff**: Built-in HTTP client middleware automatically catches 429 errors and retries with a randomized jitter backoff.
-
-### Caching Strategy
-- **Redis Cache Layer**: The orchestrator hashes the `user_id` and raw image paths. If a cache hit occurs and the claim details match, the results are loaded from Redis directly, preventing repetitive vision/LLM runs for duplicated claims.
-- **SQLite/PostgreSQL Local Session Caching**: Claim state metadata is cached at the FastAPI dependency injection layer.
-
-### Retry Strategy
-- **Fault-Tolerant LangGraph Nodes**: Each agent execution is wrapped in a Python `try-except` block. If an LLM call fails due to timeouts or API disconnects, the node retries up to 3 times before failing gracefully and escalating the claim to `human_review` with the reason `"AI Node Timeout Exception"`.

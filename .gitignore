@@ -61,3 +61,10 @@ Thumbs.db
 log.txt
 .env
 test_gemini.py
+
+PROMPT.md
+# AURELIX local run state (quota ledger, checkpoint db)
+.aurelix/
+
+# Uploaded claim photographs. User data and reproducible from nothing — never committed.
+var/
