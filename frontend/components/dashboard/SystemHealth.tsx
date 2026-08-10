@@ -53,7 +53,9 @@ export function SystemHealth() {
 
   return (
     <div
-      className="hidden lg:flex items-center space-x-3 border-r border-border/50 pr-4"
+      // The trailing divider separated this strip from a notification bell and an avatar.
+      // Both are gone, so it was left dangling at the edge of the header.
+      className="hidden md:flex items-center gap-3 shrink-0"
       title={down ? `No response from ${API_URL}` : API_URL}
     >
       <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">

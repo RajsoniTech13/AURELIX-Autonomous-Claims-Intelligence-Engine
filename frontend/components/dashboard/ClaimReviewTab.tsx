@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { 
-  CheckCircle2, XCircle, AlertCircle, Clock, ShieldCheck, 
-  ShieldX, UserX, AlertTriangle, Image as ImageIcon, 
-  GitMerge, GitPullRequest, GitCommit, FileText, Zap, MessageSquare, Bot
+import {
+  CheckCircle2, XCircle, AlertCircle, UserX,
+  GitMerge, GitPullRequest, GitCommit, Zap, Bot, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { assetUrl } from "@/lib/api";
+import { assetUrl, submitVerdict } from "@/lib/api";
 
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
@@ -27,12 +26,42 @@ function FormattedText({ text }: { text: string }) {
   );
 }
 
-export function ClaimReviewTab({ claim }: { claim: any }) {
+export function ClaimReviewTab({
+  claim,
+  onClaimUpdated,
+  onNavigate,
+}: {
+  claim: any;
+  /** A recorded human decision changes the claim; hand the fresh row back up. */
+  onClaimUpdated?: (claim: any) => void;
+  onNavigate?: (tab: string) => void;
+}) {
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [reviewerNotes, setReviewerNotes] = useState("");
+
   if (!claim) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground border border-dashed border-border/50 rounded-xl m-8">
+      <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground border border-dashed border-border/50 rounded-xl">
         <GitPullRequest className="h-10 w-10 mb-4 opacity-20" />
-        <p className="text-sm">No investigation selected. Select a claim from the queue.</p>
+        <p className="text-sm font-medium text-foreground">No investigation open</p>
+        <p className="text-xs mt-1 max-w-xs">
+          Pick a claim from the overview or the review queue, or start a new investigation.
+        </p>
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => onNavigate?.("submit")}
+            className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-md font-medium transition-colors"
+          >
+            New investigation
+          </button>
+          <button
+            onClick={() => onNavigate?.("queue")}
+            className="text-xs border border-border/60 hover:bg-muted/20 px-3 py-1.5 rounded-md font-medium transition-colors"
+          >
+            Open review queue
+          </button>
+        </div>
       </div>
     );
   }
@@ -40,9 +69,33 @@ export function ClaimReviewTab({ claim }: { claim: any }) {
   const isSupported = claim.claim_status === "supported";
   const isContradicted = claim.claim_status === "contradicted";
   const isEscalated = claim.manual_review_required;
-  
+  const humanVerdict: string | null = claim.manual_verdict ?? null;
+  const awaitingHuman = isEscalated && !humanVerdict;
+
   const imagePaths = claim.image_paths && claim.image_paths !== "none" ? claim.image_paths.split(";") : [];
   const logs = claim.audit_logs || [];
+
+  /**
+   * Record the human decision.
+   *
+   * The header previously carried an "Edit Labels" button that edited nothing and a
+   * green "Approve Auto-Resolution" button that approved nothing — on a screen whose
+   * entire purpose is deciding a claim. `POST /queue/{id}/verdict` already existed and
+   * was only reachable from the queue's expanded row.
+   */
+  const decide = async (verdict: "approved" | "rejected") => {
+    setDeciding(verdict);
+    setDecisionError(null);
+    try {
+      const updated = await submitVerdict(claim.id, verdict, reviewerNotes.trim());
+      onClaimUpdated?.(updated);
+      setReviewerNotes("");
+    } catch (e: any) {
+      setDecisionError(e?.message ?? "Could not record that decision.");
+    } finally {
+      setDeciding(null);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 mt-4 pb-20">
@@ -53,12 +106,23 @@ export function ClaimReviewTab({ claim }: { claim: any }) {
             Investigation: {claim.claim_object.charAt(0).toUpperCase() + claim.claim_object.slice(1)} Damage 
             <span className="text-muted-foreground font-mono font-normal">#INV-{claim.id?.toString().padStart(4, '0') || '0001'}</span>
           </h1>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs font-medium border-border/50">Edit Labels</Button>
-            {isEscalated ? (
-              <Button size="sm" className="h-8 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-amber-950">Review Required</Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {humanVerdict ? (
+              <span className={`text-xs font-medium px-3 py-1.5 rounded-md border ${
+                humanVerdict === "approved"
+                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                  : "bg-destructive/10 text-destructive border-destructive/20"
+              }`}>
+                Human decision: {humanVerdict}
+              </span>
+            ) : awaitingHuman ? (
+              <span className="text-xs font-medium px-3 py-1.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                Awaiting human review
+              </span>
             ) : (
-              <Button size="sm" className="h-8 text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-emerald-950">Approve Auto-Resolution</Button>
+              <span className="text-xs font-medium px-3 py-1.5 rounded-md bg-muted/30 text-muted-foreground border border-border/50">
+                Resolved automatically
+              </span>
             )}
           </div>
         </div>
@@ -174,32 +238,91 @@ export function ClaimReviewTab({ claim }: { claim: any }) {
 
         {/* Right Column: Metadata Sidebar */}
         <div className="space-y-6">
+          {/* This listed "Vision Agent", "Policy Agent" and "Fraud Agent" with three green
+              ticks, hardcoded — none of which are stage names in this pipeline, and all of
+              which reported success regardless of what actually ran. It now lists the
+              stages that genuinely executed, from the claim's own audit trail. */}
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2">Reviewers</h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center"><Bot className="h-3 w-3 text-primary" /></div>
-                  <span className="font-medium text-foreground">Vision Agent</span>
-                </div>
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2">
+              Agents run ({logs.length})
+            </h3>
+            {logs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No audit trail recorded for this claim.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {logs.map((log: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                        <Bot className="h-3 w-3 text-primary" />
+                      </div>
+                      <span className="font-medium text-foreground truncate">{log.agent_name}</span>
+                    </div>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center"><Bot className="h-3 w-3 text-primary" /></div>
-                  <span className="font-medium text-foreground">Policy Agent</span>
-                </div>
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center"><Bot className="h-3 w-3 text-primary" /></div>
-                  <span className="font-medium text-foreground">Fraud Agent</span>
-                </div>
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            )}
+          </div>
+
+          {/* The decision surface. Present only when a human decision is actually
+              outstanding — an approve button on an already-decided claim is a trap. */}
+          {awaitingHuman && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2">
+                Your decision
+              </h3>
+              {claim.escalation_reason && (
+                <p className="text-xs text-amber-500 leading-relaxed">{claim.escalation_reason}</p>
+              )}
+              <textarea
+                value={reviewerNotes}
+                onChange={e => setReviewerNotes(e.target.value)}
+                placeholder="Notes for the audit trail (optional)"
+                aria-label="Reviewer notes"
+                className="w-full h-20 text-xs resize-none rounded-md bg-background border border-border/50 p-2 focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+              />
+              {decisionError && (
+                <p className="text-xs text-destructive leading-relaxed">{decisionError}</p>
+              )}
+              <div className="flex flex-col gap-2">
+                <Button
+                  disabled={deciding !== null}
+                  onClick={() => decide("approved")}
+                  className="w-full gap-2 bg-emerald-500 hover:bg-emerald-600 text-emerald-950 font-semibold"
+                >
+                  {deciding === "approved"
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <CheckCircle2 className="h-4 w-4" />}
+                  Approve claim
+                </Button>
+                <Button
+                  disabled={deciding !== null}
+                  onClick={() => decide("rejected")}
+                  variant="outline"
+                  className="w-full gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
+                >
+                  {deciding === "rejected"
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <XCircle className="h-4 w-4" />}
+                  Reject claim
+                </Button>
               </div>
             </div>
-          </div>
+          )}
+
+          {humanVerdict && claim.manual_reviewer_notes && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2">
+                Reviewer notes
+              </h3>
+              <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                {claim.manual_reviewer_notes}
+              </p>
+            </div>
+          )}
 
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2">Labels</h3>

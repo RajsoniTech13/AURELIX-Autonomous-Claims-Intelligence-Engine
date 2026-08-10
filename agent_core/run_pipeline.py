@@ -243,18 +243,7 @@ def run(
     results = [judge(e) for e in entries]
     results.sort(key=lambda r: r["claim_id"])
 
-    # Merge in claims completed on earlier runs so the output file is always complete.
     output_rows = {r["claim_id"]: to_output_row(r) for r in results}
-    for rec in store.all_results():
-        if rec["claim_id"] not in output_rows and rec.get("normalized_result"):
-            output_rows[rec["claim_id"]] = json.loads(rec["normalized_result"])
-
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    with output_csv.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(OUTPUT_COLUMNS))
-        w.writeheader()
-        for cid in sorted(output_rows):
-            w.writerow(output_rows[cid])
 
     def _detail(r: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -271,13 +260,26 @@ def run(
 
     detail_by_id = {r["claim_id"]: _detail(r) for r in results}
 
-    # Re-derive detail for claims completed on earlier runs. The judgement pass is a pure
-    # function of the stored perception, so replaying it costs nothing and needs no API
-    # call — which is the practical payoff of keeping the decision logic out of the model.
+    # Re-derive claims completed on earlier runs. The judgement pass is a pure function of
+    # the stored perception, so replaying it costs nothing and needs no API call — which is
+    # the practical payoff of keeping the decision logic out of the model.
+    #
+    # **The replay feeds output.csv as well as results_detail.json.** It used to feed only
+    # the detail file, while the CSV fell back to the `normalized_result` frozen into the
+    # checkpoint at the time the claim was first analysed. So after a rule or ontology fix,
+    # a resumed run produced an evaluation report showing the corrected verdicts and a
+    # graded CSV still carrying the old ones — the two deliverables disagreeing, with the
+    # stale one being the contract.
     row_by_id = {(r.get("claim_id") or r.get("user_id", "")): r for r in rows}
     for rec in store.all_results():
         cid = rec["claim_id"]
-        if cid in detail_by_id or not rec.get("raw_perception"):
+        if cid in detail_by_id:
+            continue
+        if not rec.get("raw_perception"):
+            # No stored perception to re-derive from (e.g. a claim resolved at preflight).
+            # The checkpointed row is all there is, and it does not depend on rules.
+            if rec.get("normalized_result"):
+                output_rows[cid] = json.loads(rec["normalized_result"])
             continue
         perception = ClaimPerception.model_validate(json.loads(rec["raw_perception"]))
         row = row_by_id.get(cid, {})
@@ -287,6 +289,14 @@ def run(
             "batch_id": rec.get("batch_id"), "model": rec.get("model"),
         })
         detail_by_id[cid] = _detail(replayed)
+        output_rows[cid] = to_output_row(replayed)
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    with output_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(OUTPUT_COLUMNS))
+        w.writeheader()
+        for cid in sorted(output_rows):
+            w.writerow(output_rows[cid])
 
     detail = [detail_by_id[k] for k in sorted(detail_by_id)]
     results_json.parent.mkdir(parents=True, exist_ok=True)

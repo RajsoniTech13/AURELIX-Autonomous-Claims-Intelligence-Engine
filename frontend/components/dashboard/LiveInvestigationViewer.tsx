@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   CheckCircle2, Clock, ShieldCheck, AlertTriangle, UserX, 
@@ -107,13 +107,22 @@ export function LiveInvestigationViewer({
     );
   };
 
-  const fileUrl = files.length > 0 ? URL.createObjectURL(files[0]) : null;
+  // Object URLs were minted on every render and never revoked, so each re-render during a
+  // live run leaked one blob for every attached photograph. Created once per file set and
+  // released when it changes or the view unmounts.
+  const previews = useMemo(() => files.map(f => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach(URL.revokeObjectURL), [previews]);
+  const fileUrl = previews[0] ?? null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] bg-background -mx-6 -mt-6">
-      
+    // Auto height on small screens so the page can scroll; the fixed three-pane viewport
+    // only applies from lg up. The negative margins cancel the parent's padding, which is
+    // p-4 on small screens and p-6 from lg — using -mx-6 unconditionally overhung the
+    // viewport by 8px each side on a phone and produced horizontal scroll.
+    <div className="flex flex-col lg:h-[calc(100vh-8rem)] bg-background -mx-4 -mt-4 lg:-mx-6 lg:-mt-6">
+
       {/* Top Header */}
-      <div className="h-14 border-b border-border/50 flex items-center justify-between px-6 shrink-0 bg-card/30">
+      <div className="min-h-14 py-2 border-b border-border/50 flex flex-wrap items-center justify-between gap-2 px-4 lg:px-6 shrink-0 bg-card/30">
         <div className="flex items-center gap-3">
           <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <h2 className="text-sm font-semibold uppercase tracking-wider">Live Investigation Trace</h2>
@@ -125,9 +134,11 @@ export function LiveInvestigationViewer({
         )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Stacks on small screens; the three-pane layout needs ~620px of side panes alone,
+          which left nothing for the trace on a phone. */}
+      <div className="flex flex-col lg:flex-row flex-1 lg:overflow-hidden">
         {/* Left Pane: Evidence Viewer */}
-        <div className="w-[300px] border-r border-border/50 bg-card/10 flex flex-col shrink-0">
+        <div className="w-full lg:w-[300px] border-b lg:border-b-0 lg:border-r border-border/50 bg-card/10 flex flex-col shrink-0">
           <div className="px-4 py-3 border-b border-border/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <ImageIcon className="h-3.5 w-3.5" /> Context
           </div>
@@ -152,7 +163,7 @@ export function LiveInvestigationViewer({
               <div className="grid grid-cols-2 gap-2">
                 {files.slice(1).map((f, i) => (
                   <div key={i} className="aspect-square bg-muted/20 rounded border border-border/30 overflow-hidden relative">
-                    <img src={URL.createObjectURL(f)} alt={`Ev ${i}`} className="object-cover w-full h-full opacity-70" />
+                    <img src={previews[i + 1]} alt={`Evidence ${i + 2}`} className="object-cover w-full h-full opacity-70" />
                   </div>
                 ))}
               </div>
@@ -161,7 +172,7 @@ export function LiveInvestigationViewer({
         </div>
 
         {/* Center Pane: Orchestration Graph */}
-        <div className="flex-1 flex flex-col relative bg-[#0a0a0c] overflow-y-auto custom-scrollbar p-8">
+        <div className="flex-1 flex flex-col relative bg-[#0a0a0c] overflow-y-auto custom-scrollbar p-4 sm:p-8 min-h-[420px]">
           <div className="max-w-xl mx-auto w-full flex flex-col items-center space-y-6 pb-20">
             <Node id="preflight" label="Preflight — Quality Gate" icon={ImageIcon} delay={0.1} />
 
@@ -196,7 +207,7 @@ export function LiveInvestigationViewer({
         </div>
 
         {/* Right Pane: Summary */}
-        <div className="w-[320px] border-l border-border/50 bg-card/10 flex flex-col shrink-0">
+        <div className="w-full lg:w-[320px] border-t lg:border-t-0 lg:border-l border-border/50 bg-card/10 flex flex-col shrink-0">
           <div className="px-4 py-3 border-b border-border/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <Activity className="h-3.5 w-3.5" /> Output Summary
           </div>

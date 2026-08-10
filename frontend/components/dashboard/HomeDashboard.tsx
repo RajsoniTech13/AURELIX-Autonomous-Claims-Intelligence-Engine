@@ -156,7 +156,7 @@ export function HomeDashboard({
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Manual Review</span>
             <ShieldCheck className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-amber-500">{kpi(k => k.manual_review_claims)}</div>
+          <div className="text-2xl font-bold tracking-tight text-amber-500">{kpi(k => k.pending_review_claims)}</div>
           <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1 hover:text-foreground transition-colors">
             View queue <ArrowRight className="h-3 w-3" />
           </div>
@@ -188,7 +188,15 @@ export function HomeDashboard({
         </div>
         
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading investigations...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading investigations…</div>
+        ) : error ? (
+          // The fetch error was captured into state and never rendered, so a backend that
+          // was down produced an empty table indistinguishable from "no claims yet".
+          <div className="p-8 text-center flex flex-col items-center">
+            <AlertTriangle className="h-8 w-8 mb-3 text-destructive/60" />
+            <p className="text-sm font-medium text-foreground">Could not load investigations</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-md leading-relaxed">{error}</p>
+          </div>
         ) : claims.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center">
             <FileText className="h-8 w-8 mb-3 opacity-20" />

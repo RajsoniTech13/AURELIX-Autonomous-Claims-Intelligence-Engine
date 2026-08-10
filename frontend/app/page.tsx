@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  ShieldCheck, PlusCircle, Search,
-  FileText, Activity, Settings, Bell, User,
-  Zap, ChevronLeft, ChevronRight, Pin, History
+import {
+  ShieldCheck, PlusCircle, FileText, Activity,
+  Zap, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { SubmitClaimTab } from "@/components/dashboard/SubmitClaimTab";
 import { ClaimReviewTab } from "@/components/dashboard/ClaimReviewTab";
@@ -20,6 +19,17 @@ export default function Dashboard() {
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Collapse the sidebar to an icon rail on small screens. At 240px wide it left a phone
+  // with about 135px of content, so every table and the investigation trace overflowed
+  // horizontally. The toggle still works — this only picks a sane default per viewport.
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 1023px)");
+    const apply = (e: MediaQueryList | MediaQueryListEvent) => setIsSidebarOpen(!e.matches);
+    apply(narrow);
+    narrow.addEventListener("change", apply);
+    return () => narrow.removeEventListener("change", apply);
+  }, []);
 
   const handleClaimSubmitted = (claim: any) => {
     setSelectedClaim(claim);
@@ -40,31 +50,30 @@ export default function Dashboard() {
     }
   };
 
+  // Only destinations that exist. "Pinned Claims", "Recent Activity" and "Settings" were
+  // navigation items that led to a "Module coming soon" placeholder — three of the eight
+  // entries in the primary navigation went nowhere. A first-time user cannot tell a
+  // not-yet-built section from a broken one, so they are gone rather than stubbed.
   const navGroups = [
     {
-      title: "Main",
+      title: "Claims",
       items: [
         { id: "overview", label: "Overview", icon: Activity },
         { id: "submit", label: "New Investigation", icon: PlusCircle },
         { id: "review", label: "Investigations", icon: FileText },
+      ]
+    },
+    {
+      title: "Review",
+      items: [
+        { id: "queue", label: "Manual Review", icon: ShieldCheck },
         { id: "analytics", label: "Analytics", icon: Zap },
       ]
     },
-    {
-      title: "Queue",
-      items: [
-        { id: "queue", label: "Manual Review", icon: ShieldCheck },
-        { id: "pinned", label: "Pinned Claims", icon: Pin },
-        { id: "recent", label: "Recent Activity", icon: History },
-      ]
-    },
-    {
-      title: "System",
-      items: [
-        { id: "settings", label: "Settings", icon: Settings },
-      ]
-    }
   ];
+
+  const activeLabel =
+    navGroups.flatMap(g => g.items).find(i => i.id === activeTab)?.label ?? "AURELIX";
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground selection:bg-primary/30 font-sans">
@@ -146,37 +155,24 @@ export default function Dashboard() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#0a0a0c]">
         {/* Topbar */}
-        <header className="h-12 border-b border-border/50 bg-background/95 backdrop-blur flex items-center justify-between px-4 shrink-0 z-10">
-          <div className="flex items-center space-x-4">
-            <div className="relative group">
-              <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Search claims, rules, agents..." 
-                className="h-8 w-[300px] bg-muted/20 border border-border/40 rounded-md pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50 focus:bg-background"
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                <span className="text-[9px] font-mono bg-muted/40 px-1.5 py-0.5 rounded text-muted-foreground">⌘</span>
-                <span className="text-[9px] font-mono bg-muted/40 px-1.5 py-0.5 rounded text-muted-foreground">K</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            {/* System health — measured, not decorative.
-                These read "Gemini: 100%", "Redis: 2ms", "API: 14ms" as hardcoded strings.
-                A status indicator that reports health it never checked is worse than no
-                indicator: it says "green" while the backend is down. */}
-            <SystemHealth />
+        {/*
+          The topbar carried a search field that searched nothing, a notification bell with
+          a permanent unread dot and no notifications behind it, and an avatar for a product
+          with no accounts. All three were removed rather than stubbed: a control that looks
+          live and does nothing costs a first-time user more than an absent one.
 
-            <button className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="h-4 w-4" />
-              <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
-            </button>
-            <div className="h-6 w-6 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center cursor-pointer">
-              <User className="h-3 w-3 text-primary" />
-            </div>
+          What remains is the one thing here that reports real state.
+        */}
+        <header className="h-12 border-b border-border/50 bg-background/95 backdrop-blur flex items-center justify-between gap-4 px-4 shrink-0 z-10">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="h-4 w-4 text-primary shrink-0 lg:hidden" />
+            <span className="text-sm font-medium text-foreground truncate">{activeLabel}</span>
           </div>
+
+          {/* System health — measured, not decorative. This read "Gemini: 100%",
+              "Redis: 2ms", "API: 14ms" as hardcoded strings; an indicator that reports
+              health it never checked says "green" while the backend is down. */}
+          <SystemHealth />
         </header>
 
         {/* Scrollable Page Content */}
@@ -202,18 +198,18 @@ export default function Dashboard() {
                         {claimError}
                       </div>
                     )}
-                    <ClaimReviewTab claim={selectedClaim} />
+                    <ClaimReviewTab
+                      claim={selectedClaim}
+                      onNavigate={setActiveTab}
+                      // The verdict endpoint returns the updated row but not its audit
+                      // trail, so re-fetch the detail rather than rendering a claim whose
+                      // agent timeline has silently vanished.
+                      onClaimUpdated={updated => handleSelectClaim(updated.id)}
+                    />
                   </>
                 )}
                 {activeTab === "queue" && <ReviewQueueTab onSelectClaim={handleSelectClaim} />}
                 {activeTab === "analytics" && <AnalyticsTab />}
-                
-                {["pinned", "recent", "settings"].includes(activeTab) && (
-                  <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground">
-                    <Activity className="h-8 w-8 mb-4 opacity-20" />
-                    <p className="text-sm">Module coming soon.</p>
-                  </div>
-                )}
               </div>
             </motion.div>
           </AnimatePresence>

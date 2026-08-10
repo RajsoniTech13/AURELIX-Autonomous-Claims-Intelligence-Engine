@@ -97,14 +97,60 @@ _ADJACENT = {
 }
 
 
-def normalise_part(part: str) -> str:
-    """Map a free-text part name onto the canonical ontology."""
+# Tokens that name a different component depending on what the object is.
+#
+# `_SYNONYMS` is one flat table, so it can only hold one meaning per token — and the
+# meaning it held was the car one. A package claimant writing "side" and a model observing
+# "side_panel" both resolved to `quarter_panel`, a car part, which read as a part mismatch
+# and contradicted a perfectly valid package claim (SYN-014).
+#
+# These overlay the global table when the claim's object category is known. Only tokens
+# that genuinely resolve to the wrong object class are listed; anything already correct
+# globally is left alone.
+_OBJECT_SCOPED_SYNONYMS: dict[str, dict[str, str]] = {
+    "package": {
+        "side": "package_side", "side_panel": "package_side",
+        "body_panel": "package_side", "rear_panel": "package_side",
+        "panel": "package_side", "wall": "package_side",
+        "corner": "package_corner", "edge": "package_corner",
+        "lid": "box", "cover": "box", "top": "box", "flap": "box", "body": "box",
+    },
+    "car": {
+        # A car's "side" or "body" is its flank. Exact keys win before this, so
+        # "side_mirror" is still a mirror.
+        "side": "quarter_panel", "panel": "quarter_panel", "body": "quarter_panel",
+    },
+    "laptop": {
+        # The global table is already laptop-first for body / corner / lid / cover /
+        # screen. Only the panel family leaks, and it leaks to a car part.
+        "side_panel": "body", "body_panel": "body", "rear_panel": "body",
+        # Bare "panel" is left unmapped on purpose: on a laptop it is as likely to mean
+        # the display panel as the base panel, and guessing between them is worse than
+        # declining to.
+    },
+}
+
+
+def normalise_part(part: str, object_category: str = "") -> str:
+    """
+    Map a free-text part name onto the canonical ontology.
+
+    `object_category` disambiguates tokens that name different components on different
+    objects — see `_OBJECT_SCOPED_SYNONYMS`. It is optional so existing callers and tests
+    keep the previous global-only behaviour.
+    """
     key = (part or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if key in _SYNONYMS:
-        return _SYNONYMS[key]
+
+    table = _SYNONYMS
+    scoped = _OBJECT_SCOPED_SYNONYMS.get(normalise_object(object_category)) if object_category else None
+    if scoped:
+        table = {**_SYNONYMS, **scoped}
+
+    if key in table:
+        return table[key]
     # "front_bumper_area", "left_headlight" -> longest matching canonical token
     best = None
-    for syn, canon in _SYNONYMS.items():
+    for syn, canon in table.items():
         if syn and len(syn) > 2 and syn in key:
             if best is None or len(syn) > len(best[0]):
                 best = (syn, canon)
@@ -123,11 +169,30 @@ _OBJECT_SYNONYMS = {
 
 
 def normalise_object(obj: str) -> str:
-    key = (obj or "").strip().lower()
+    """
+    Map a free-text object category onto car | laptop | package.
+
+    Exact key, then whole word, then longest substring — in that order.
+
+    Scanning for *any* substring in insertion order resolved **"carton" to "car"**, because
+    "car" is a prefix of it. A carton claim was therefore judged against a vehicle, which
+    makes `object_match` a mismatch and fires `R010_wrong_object` — the most dispositive
+    rule in the engine — contradicting a valid package claim outright. "cardboard box" had
+    the same failure. Word matching is what removes that class of collision.
+    """
+    key = (obj or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if key in _OBJECT_SYNONYMS:
+        return _OBJECT_SYNONYMS[key]
+
+    for token in key.split("_"):
+        if token in _OBJECT_SYNONYMS:
+            return _OBJECT_SYNONYMS[token]
+
+    best = None
     for syn, canon in _OBJECT_SYNONYMS.items():
-        if syn in key:
-            return canon
-    return key or "unknown"
+        if syn in key and (best is None or len(syn) > len(best[0])):
+            best = (syn, canon)
+    return best[1] if best else key or "unknown"
 
 
 # ─── Result ─────────────────────────────────────────────────────────────────
@@ -180,14 +245,23 @@ def compute_alignment(perception: ClaimPerception, declared_object: str = "") ->
     """Compare claimed against observed. Pure function of the perception record."""
     notes: List[str] = []
 
-    claimed_part = normalise_part(perception.claim_understanding.claimed_part)
-    observed = [(normalise_part(d.part), d) for d in perception.damage_analysis.damaged_parts]
-    observed_parts = [p for p, _ in observed]
-
-    # ── object match ──
+    # The object is resolved first because it scopes how part names are read: "side_panel"
+    # is a car's quarter panel and a package's side wall. Both sides of the comparison use
+    # the *claimed* object as their frame of reference — when the images show something
+    # else entirely, R010_wrong_object fires before any part rule is reached, so the part
+    # comparison is moot in that case.
     claimed_object = normalise_object(
         perception.claim_understanding.object_category or declared_object
     )
+
+    claimed_part = normalise_part(perception.claim_understanding.claimed_part, claimed_object)
+    observed = [
+        (normalise_part(d.part, claimed_object), d)
+        for d in perception.damage_analysis.damaged_parts
+    ]
+    observed_parts = [p for p, _ in observed]
+
+    # ── object match ──
     seen_object = normalise_object(perception.observed_object)
     if seen_object in ("unknown", "none", ""):
         object_match: ObjectMatch = "unknown"

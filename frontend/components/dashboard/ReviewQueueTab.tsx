@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getReviewQueue, submitVerdict } from "@/lib/api";
 import { 
-  Loader2, Search, Filter, ShieldAlert, CheckCircle2, 
+  Loader2, Search, ShieldAlert, CheckCircle2,
   XCircle, AlertCircle, Clock, ChevronRight, User, Hash, FileSearch
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +33,21 @@ export function ReviewQueueTab({
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [notes, setNotes] = useState<{ [id: number]: string }>({});
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+
+  const visible = query.trim()
+    ? queue.filter(c => {
+        const q = query.trim().toLowerCase();
+        return [
+          String(c.id).padStart(4, "0"),
+          c.user_id,
+          c.claim_object,
+          c.escalation_reason,
+          c.claim_status,
+          c.claim_status_justification,
+        ].some(field => (field ?? "").toString().toLowerCase().includes(q));
+      })
+    : queue;
 
   const fetchQueue = async () => {
     try {
@@ -94,21 +109,30 @@ export function ReviewQueueTab({
             <ShieldAlert className="h-6 w-6 text-amber-500" />
             Manual Review Queue
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">Investigate {queue.length} claims escalated by AURELIX AI.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {query.trim()
+              ? `${visible.length} of ${queue.length} escalated claim${queue.length === 1 ? "" : "s"} match "${query.trim()}".`
+              : queue.length === 0
+                ? "No claims are currently awaiting human review."
+                : `${queue.length} claim${queue.length === 1 ? "" : "s"} escalated for human review.`}
+          </p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="relative group">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <input 
-              type="text" 
-              placeholder="Search by ID, User, or Context..." 
-              className="h-9 w-[280px] bg-background border border-border/50 rounded-md pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
-            />
-          </div>
-          <Button variant="outline" size="sm" className="h-9 gap-2 text-muted-foreground border-border/50 hover:bg-muted/30">
-            <Filter className="h-4 w-4" /> Filter
-          </Button>
+        {/* The search field filtered nothing and sat next to a Filter button that opened
+            nothing. Search now actually filters the loaded queue — client side, because
+            the queue is escalated claims only and already in memory, so a round trip would
+            buy latency and nothing else. The Filter button is gone: the queue is by
+            definition a single filter, and a second one that did nothing was noise. */}
+        <div className="relative group w-full md:w-[320px]">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by ID, claimant, object, or reason..."
+            aria-label="Filter the review queue"
+            className="h-9 w-full bg-background border border-border/50 rounded-md pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
+          />
         </div>
       </div>
 
@@ -127,15 +151,36 @@ export function ReviewQueueTab({
           <div className="w-[120px] text-right">Age</div>
         </div>
 
-        {queue.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground bg-background">
-            <CheckCircle2 className="h-10 w-10 mb-3 opacity-20 text-emerald-500" />
-            <p className="text-sm font-medium">Inbox Zero</p>
-            <p className="text-xs mt-1">All escalations have been resolved.</p>
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground bg-background px-6 text-center">
+            {query.trim() ? (
+              <>
+                <Search className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm font-medium">No matching claims</p>
+                <p className="text-xs mt-1">
+                  Nothing in the queue matches “{query.trim()}”.
+                </p>
+                <button
+                  onClick={() => setQuery("")}
+                  className="mt-3 text-xs text-primary hover:underline"
+                >
+                  Clear search
+                </button>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-10 w-10 mb-3 opacity-20 text-emerald-500" />
+                <p className="text-sm font-medium">Nothing awaiting review</p>
+                <p className="text-xs mt-1">
+                  Every escalated claim has been resolved. New escalations appear here
+                  automatically.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border/30 bg-background">
-            {queue.map(claim => (
+            {visible.map(claim => (
               <div key={claim.id} className="group flex flex-col hover:bg-muted/10 transition-colors">
                 
                 {/* Row Header */}

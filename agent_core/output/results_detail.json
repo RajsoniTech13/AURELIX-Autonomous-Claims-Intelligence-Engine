@@ -1074,13 +1074,13 @@
    "part_match": "exact",
    "object_match": "match",
    "severity_delta": null,
-   "claimed_part": "corner",
+   "claimed_part": "package_corner",
    "observed_parts": [
-    "corner"
+    "package_corner"
    ],
    "claimed_severity": "unknown",
    "observed_severity": "medium",
-   "matched_part": "corner",
+   "matched_part": "package_corner",
    "damage_detected": true,
    "claimed_part_visible": true,
    "notes": [
@@ -1254,38 +1254,31 @@
   "claim_id": "SYN-014",
   "batch_id": "batch_005",
   "verdict": {
-   "claim_status": "contradicted",
-   "confidence": 70,
-   "fraud_score": 30,
+   "claim_status": "supported",
+   "confidence": 94,
+   "fraud_score": 10,
    "rule_ids": [
-    "R040_part_mismatch",
-    "FRAUD:part_mismatch_with_damage_elsewhere"
+    "R052_supported"
    ],
-   "risk_flags": [
-    "claim_mismatch",
-    "manual_review_required"
-   ],
-   "justification": "Damage was observed, but on a different part from the one claimed. Claimed side but damage was observed on quarter_panel. Severity could not be compared (one side is unknown). Evidence: img_1. [R040_part_mismatch]",
-   "manual_review_required": true,
-   "escalation_reason": "verdict 'contradicted' always requires review"
+   "risk_flags": [],
+   "justification": "The submitted images confirm the claimed damage on the claimed part. Evidence: img_1. [R052_supported]",
+   "manual_review_required": false,
+   "escalation_reason": null
   },
   "alignment": {
-   "part_match": "mismatch",
+   "part_match": "exact",
    "object_match": "match",
-   "severity_delta": null,
-   "claimed_part": "side",
+   "severity_delta": 0,
+   "claimed_part": "package_side",
    "observed_parts": [
-    "quarter_panel"
+    "package_side"
    ],
    "claimed_severity": "low",
-   "observed_severity": "unknown",
-   "matched_part": null,
+   "observed_severity": "low",
+   "matched_part": "package_side",
    "damage_detected": true,
    "claimed_part_visible": true,
-   "notes": [
-    "claimed side but damage was observed on quarter_panel",
-    "severity could not be compared (one side is unknown)"
-   ]
+   "notes": []
   },
   "perception": {
    "claim_id": "SYN-014",

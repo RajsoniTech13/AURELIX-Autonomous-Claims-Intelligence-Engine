@@ -14,9 +14,9 @@
 | metric | value |
 | :--- | ---: |
 | Cases scored | 44 / 44 |
-| **Accuracy** | **93.2%** |
-| Macro F1 | 93.2% |
-| Weighted F1 | 93.2% |
+| **Accuracy** | **95.5%** |
+| Macro F1 | 95.0% |
+| Weighted F1 | 95.4% |
 | Mean confidence | 70 |
 | Mean fraud score | 20 |
 
@@ -24,8 +24,8 @@
 
 | class | support | TP | FP | FN | precision | recall | F1 |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| supported | 19 | 18 | 1 | 1 | 94.7% | 94.7% | 94.7% |
-| contradicted | 18 | 16 | 1 | 2 | 94.1% | 88.9% | 91.4% |
+| supported | 19 | 19 | 1 | 0 | 95.0% | 100.0% | 97.4% |
+| contradicted | 18 | 16 | 0 | 2 | 100.0% | 88.9% | 94.1% |
 | not_enough_information | 7 | 7 | 1 | 0 | 87.5% | 100.0% | 93.3% |
 
 ## Confusion matrix
@@ -34,7 +34,7 @@ Rows are ground truth, columns are predictions.
 
 | actual \ predicted | supported | contradicted | not_enough_information |
 | :--- | ---: | ---: | ---: |
-| **supported** | 18 | 1 | 0 |
+| **supported** | 19 | 0 | 0 |
 | **contradicted** | 1 | 16 | 1 |
 | **not_enough_information** | 0 | 0 | 7 |
 
@@ -47,7 +47,7 @@ The number that matters: aggregate accuracy hides which specific failure mode is
 | adjacent_part | 3 | 3 | 100% |
 | injection | 1 | 1 | 100% |
 | injection_mismatch | 1 | 1 | 100% |
-| match | 13 | 14 | 93% |
+| match | 14 | 14 | 100% |
 | no_damage | 2 | 2 | 100% |
 | part_mismatch | 6 | 7 | 86% |
 | part_not_visible | 3 | 3 | 100% |
@@ -61,7 +61,6 @@ The number that matters: aggregate accuracy hides which specific failure mode is
 
 | claim | category | expected | got | part_match | object_match | Δsev | observed | rules |
 | :--- | :--- | :--- | :--- | :--- | :--- | ---: | :--- | :--- |
-| SYN-014 | match | supported | contradicted | mismatch | match | None | quarter_panel | R040_part_mismatch,FRAUD:part_mismatch_with_damage_elsewhere |
 | SYN-021 | part_mismatch | contradicted | not_enough_information | not_visible | match | None | rear_bumper | R020_claimed_part_not_visible |
 | SYN-029 | severity_inflation | contradicted | supported | exact | match | 1 | door | R050_supported_with_overstatement |
 

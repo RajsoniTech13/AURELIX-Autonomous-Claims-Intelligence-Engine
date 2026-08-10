@@ -92,6 +92,13 @@ class KPIStats(BaseModel):
     contradicted_claims: int
     not_enough_info_claims: int
     manual_review_claims: int
+    # Additive, defaulted, so existing consumers are unaffected.
+    #
+    # `manual_review_claims` counts every claim that was ever escalated, which is the right
+    # figure for "how often did automation defer to a human". It is the wrong figure for a
+    # tile that links to the review queue: the queue only lists claims still awaiting a
+    # decision, so the dashboard showed 10 and the queue behind it showed 7.
+    pending_review_claims: int = 0
     average_confidence: float
 
 class StatusDistribution(BaseModel):

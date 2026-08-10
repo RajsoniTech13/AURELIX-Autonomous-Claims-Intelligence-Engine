@@ -214,7 +214,8 @@ def get_analytics(db: Session = Depends(get_db)):
     total = db.query(Claim).count()
     if total == 0:
         return AnalyticsDashboardData(
-            kpis=KPIStats(total_claims=0, supported_claims=0, contradicted_claims=0, not_enough_info_claims=0, manual_review_claims=0, average_confidence=0.0),
+            kpis=KPIStats(total_claims=0, supported_claims=0, contradicted_claims=0, not_enough_info_claims=0, manual_review_claims=0,
+                           pending_review_claims=0, average_confidence=0.0),
             status_distribution=[], object_distribution=[], severity_distribution=[],
             confidence_distribution=[], fraud_distribution=[], claims_over_time=[],
         )
@@ -223,6 +224,11 @@ def get_analytics(db: Session = Depends(get_db)):
     contradicted = db.query(Claim).filter(Claim.claim_status == "contradicted").count()
     not_enough = db.query(Claim).filter(Claim.claim_status == "not_enough_information").count()
     escalated = db.query(Claim).filter(Claim.manual_review_required == True).count()
+    # Same predicate as GET /queue, so the dashboard tile and the list it links to agree.
+    pending_review = db.query(Claim).filter(
+        Claim.manual_review_required == True,
+        Claim.manual_verdict == None,  # noqa: E711 - SQLAlchemy needs `== None`, not `is None`
+    ).count()
     avg_conf = db.query(func.avg(Claim.confidence_score)).scalar() or 0.0
 
     status_q = db.query(Claim.claim_status, func.count(Claim.id)).group_by(Claim.claim_status).all()
@@ -265,6 +271,7 @@ def get_analytics(db: Session = Depends(get_db)):
         kpis=KPIStats(
             total_claims=total, supported_claims=supported, contradicted_claims=contradicted,
             not_enough_info_claims=not_enough, manual_review_claims=escalated,
+            pending_review_claims=pending_review,
             average_confidence=round(float(avg_conf), 1),
         ),
         status_distribution=status_dist, object_distribution=object_dist,

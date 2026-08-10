@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAnalytics } from "@/lib/api";
-import { Loader2, Activity, CheckCircle, AlertTriangle, UserX, Database, Zap, Clock, ShieldCheck, PieChart as PieChartIcon } from "lucide-react";
+import { Loader2, Activity, AlertTriangle, UserX, Zap, ShieldCheck, RefreshCw, PieChart as PieChartIcon } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -19,31 +19,77 @@ const COLORS = {
 export function AnalyticsTab() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const stats = await getAnalytics();
-        setData(stats);
-      } catch (err) {
-        console.error("Failed to fetch analytics:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStats();
-  }, []);
+  const fetchStats = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await getAnalytics());
+      setFetchedAt(new Date());
+    } catch (err: any) {
+      // Previously logged to the console and left `loading` visually true, so a backend
+      // that was down rendered a spinner that never resolved — indistinguishable from a
+      // slow request, and with no way to retry short of a page reload.
+      setError(err?.message ?? "Could not load analytics.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (loading || !data) {
+  useEffect(() => { fetchStats(); }, []);
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30" />
+        <p className="text-xs text-muted-foreground">Loading analytics…</p>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+        <AlertTriangle className="h-8 w-8 mb-3 text-destructive/60" />
+        <p className="text-sm font-medium text-foreground">Analytics unavailable</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-md leading-relaxed">
+          {error ?? "The analytics service returned no data."}
+        </p>
+        <button
+          onClick={fetchStats}
+          className="mt-4 text-xs bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md font-medium transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (!data.kpis?.total_claims) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+        <Activity className="h-8 w-8 mb-3 opacity-20" />
+        <p className="text-sm font-medium text-foreground">No claims analysed yet</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+          Analytics appear once the first investigation completes.
+        </p>
       </div>
     );
   }
 
   const { kpis, status_distribution, claims_over_time } = data;
-  const automationRate = kpis.total_claims ? Math.round((kpis.supported_claims / kpis.total_claims) * 100) : 0;
+
+  // Was `supported / total`, which is an approval rate, sitting under the label
+  // "Automation Rate — no human intervention required". The Overview tile computed the
+  // same-named metric a different way, so the two screens disagreed. One definition:
+  // the share of claims resolved without being escalated to a human.
+  // One decimal, matching the Overview tile — the same metric rendered 61.5% on one
+  // screen and 62% on the other purely from a different rounding call.
+  const automationRate = kpis.total_claims
+    ? (((kpis.total_claims - kpis.manual_review_claims) / kpis.total_claims) * 100).toFixed(1)
+    : "0.0";
 
   // Formatting for Recharts
   const pieData = status_distribution.map((d: any) => ({
@@ -58,14 +104,21 @@ export function AnalyticsTab() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/50 pb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight mb-1">Platform Analytics</h2>
-          <p className="text-sm text-muted-foreground">Real-time performance and investigation metrics across the AURELIX network.</p>
+          <p className="text-sm text-muted-foreground">Decision, confidence and fraud metrics across every claim analysed.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 px-3 py-1.5 rounded-md border border-border/50">
-          <span className="relative flex h-2 w-2 mr-1">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        {/* This was a pulsing green "Live Data Feed" badge on a page that fetches once on
+            mount. It now states when the figures were actually read, and offers the
+            refresh the badge implied but never performed. */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-muted-foreground">
+            Updated {fetchedAt ? fetchedAt.toLocaleTimeString() : "—"}
           </span>
-          Live Data Feed
+          <button
+            onClick={fetchStats}
+            className="text-xs flex items-center gap-1.5 text-muted-foreground hover:text-foreground bg-muted/20 hover:bg-muted/40 px-3 py-1.5 rounded-md border border-border/50 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </button>
         </div>
       </div>
 
@@ -77,8 +130,12 @@ export function AnalyticsTab() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="text-3xl font-bold tracking-tight">{kpis.total_claims}</div>
-          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-            <span className="text-emerald-500 font-medium">+12%</span> vs last month
+          {/* Read "+12% vs last month". Nothing in this system stores a month-over-month
+              comparison, so the figure was invented. Replaced with the breakdown the
+              endpoint actually returns. */}
+          <div className="text-xs text-muted-foreground mt-2">
+            {kpis.supported_claims} supported · {kpis.contradicted_claims} contradicted ·{" "}
+            {kpis.not_enough_info_claims} inconclusive
           </div>
         </div>
         
@@ -109,7 +166,7 @@ export function AnalyticsTab() {
             <span className="text-sm font-medium text-muted-foreground">Escalation Queue</span>
             <UserX className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="text-3xl font-bold tracking-tight text-amber-500">{kpis.manual_review_claims}</div>
+          <div className="text-3xl font-bold tracking-tight text-amber-500">{kpis.pending_review_claims}</div>
           <div className="text-xs text-muted-foreground mt-2">
             Pending manual review
           </div>
@@ -189,36 +246,36 @@ export function AnalyticsTab() {
         </div>
       </div>
 
-      {/* System Health / Engineering Story Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-card border border-border/50 rounded-lg p-5 flex items-center justify-between">
-          <div className="space-y-1">
-            <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Avg Pipeline Latency</h4>
-            <div className="text-2xl font-bold">2.4<span className="text-sm font-normal text-muted-foreground ml-1">sec</span></div>
-          </div>
-          <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <Clock className="h-5 w-5 text-emerald-500" />
-          </div>
-        </div>
-        
-        <div className="bg-card border border-border/50 rounded-lg p-5 flex items-center justify-between">
-          <div className="space-y-1">
-            <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Redis Cache Hit Rate</h4>
-            <div className="text-2xl font-bold">94.2<span className="text-sm font-normal text-muted-foreground ml-1">%</span></div>
-          </div>
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <Database className="h-5 w-5 text-primary" />
-          </div>
-        </div>
+      {/* Removed: "Avg Pipeline Latency 2.4 sec", "Redis Cache Hit Rate 94.2%" and
+          "Gemini API Success 99.9%". None of the three were measured anywhere — there is
+          no latency timer, no cache-hit counter and no success-rate metric in the backend.
+          Fabricated operational numbers on an analytics page are worse than none: they are
+          exactly what a reader would trust without checking.
 
-        <div className="bg-card border border-border/50 rounded-lg p-5 flex items-center justify-between">
-          <div className="space-y-1">
-            <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Gemini API Success</h4>
-            <div className="text-2xl font-bold">99.9<span className="text-sm font-normal text-muted-foreground ml-1">%</span></div>
-          </div>
-          <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <Activity className="h-5 w-5 text-emerald-500" />
-          </div>
+          Fraud-score distribution is real, comes from the same /analytics response, and is
+          the operationally useful thing this row was occupying space with. */}
+      <div className="bg-card border border-border/50 rounded-lg p-5">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+          Fraud Score Distribution
+        </h3>
+        <div className="h-[220px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={(data.fraud_distribution ?? []).map((d: any) => ({
+              bucket: d.bucket, claims: d.count,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.muted} vertical={false} />
+              <XAxis dataKey="bucket" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+              <RechartsTooltip
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                contentStyle={{
+                  background: "#18181b", border: "1px solid #27272a",
+                  borderRadius: "8px", fontSize: "12px",
+                }}
+              />
+              <Bar dataKey="claims" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
