@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   CheckCircle2, Clock, ShieldCheck, AlertTriangle, UserX, 
-  Search, FileText, Image as ImageIcon, Check, Activity, Code
+  Search, FileText, Image as ImageIcon, Check, Activity, Code,
+  ArrowRight, RotateCcw
 } from "lucide-react";
 
 // `skipped` is a real outcome, not an error: when preflight finds no usable image the
@@ -20,6 +21,10 @@ interface LiveInvestigationViewerProps {
   files: File[];
   completedTime?: number;
   claimResult?: any;
+  /** Hand the finished claim to the full investigation view. */
+  onOpenFullReport?: () => void;
+  /** Clear the wizard and start a new submission. */
+  onRestart?: () => void;
 }
 
 const nodeVariants = {
@@ -33,7 +38,9 @@ const lineVariants = {
   visible: { pathLength: 1, opacity: 1, transition: { duration: 0.5 } }
 };
 
-export function LiveInvestigationViewer({ stages, files, completedTime, claimResult }: LiveInvestigationViewerProps) {
+export function LiveInvestigationViewer({
+  stages, files, completedTime, claimResult, onOpenFullReport, onRestart,
+}: LiveInvestigationViewerProps) {
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -253,6 +260,27 @@ export function LiveInvestigationViewer({ stages, files, completedTime, claimRes
                       </div>
                     </div>
                   )}
+
+                  {/* Where the run ended before: a verdict on screen and no way to reach
+                      the audit trail behind it. The full report is the per-agent reasoning
+                      the decision was actually assembled from. */}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <button
+                      onClick={onOpenFullReport}
+                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-semibold transition-colors"
+                    >
+                      Open full investigation <ArrowRight className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={onRestart}
+                      className="w-full flex items-center justify-center gap-2 border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/20 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> New investigation
+                    </button>
+                    <div className="text-[10px] text-muted-foreground text-center font-mono pt-1">
+                      claim #{claimResult.id}
+                    </div>
+                  </div>
                 </motion.div>
               </AnimatePresence>
             )}

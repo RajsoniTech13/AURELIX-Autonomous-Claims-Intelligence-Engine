@@ -32,6 +32,21 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def utc_iso(value: Optional[datetime.datetime]) -> Optional[str]:
+    """
+    Serialise a stored timestamp as unambiguous UTC.
+
+    Columns hold naive UTC so SQLite can compare them. `.isoformat()` on a naive value
+    yields no offset, and ECMAScript reads that as *local* time — which put every claim
+    hours into the reader's future and made every relative-time label wrong. Same reasoning
+    as `models.schemas.UTCTimestamps`, applied to the hand-built dictionaries.
+    """
+    if value is None:
+        return None
+    aware = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
+    return aware.isoformat()
+
+
 def _analysis_to_db_claim(
     analysis: ClaimAnalysis,
     user_id: str,
@@ -205,13 +220,71 @@ def _claim_to_dict(db_claim: Claim) -> Dict[str, Any]:
         "drivable_status": db_claim.drivable_status,
         "fraud_score": db_claim.fraud_score, "user_risk_score": db_claim.user_risk_score,
         "risk_level": db_claim.risk_level, "risk_flags": db_claim.risk_flags,
-        "created_at": db_claim.created_at.isoformat() if db_claim.created_at else None,
+        "supporting_image_ids": db_claim.supporting_image_ids,
+        "created_at": utc_iso(db_claim.created_at),
         "audit_logs": [
             {"agent_name": l.agent_name, "reasoning": l.reasoning,
-             "timestamp": l.timestamp.isoformat()}
+             "timestamp": utc_iso(l.timestamp)}
             for l in db_claim.audit_logs
         ],
     }
+
+
+_HEARTBEAT = object()
+"""Sentinel: nothing has happened for a while, but the connection is still alive."""
+
+HEARTBEAT_SECONDS = 15.0
+
+
+def _events_with_heartbeat(**kwargs: Any) -> Iterator[Any]:
+    """
+    `analyse_claim_events`, with a keepalive during the long silence.
+
+    The pipeline emits nothing between `perception:running` and `perception:complete`, and
+    that gap is the whole model call. Measured at ~12 seconds when quota is free and
+    **185 seconds** under per-minute rate-limit backoff — and a reverse proxy in front of
+    the API (Render's included) closes a response that has sent no bytes for its idle
+    timeout, typically 100 seconds. The claim then completes server-side and the user sees
+    a dead page: work spent out of a 20-request daily budget, delivered to nobody.
+
+    So the generator is moved onto a worker thread and this one drains a queue, emitting an
+    SSE comment whenever the wait exceeds `HEARTBEAT_SECONDS`. Comments are part of the
+    protocol: the browser's parser discards them, no handler fires, and the connection
+    stays demonstrably alive.
+
+    Database work deliberately stays with the caller. A Session is not thread-safe, and
+    handing one to a worker to save a queue would trade a visible timeout for an invisible
+    corruption.
+    """
+    import queue
+    import threading
+
+    channel: "queue.Queue[Any]" = queue.Queue()
+    _FINISHED = object()
+
+    def produce() -> None:
+        try:
+            for event in analyse_claim_events(**kwargs):
+                channel.put(event)
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the consuming thread
+            channel.put(exc)
+        finally:
+            channel.put(_FINISHED)
+
+    worker = threading.Thread(target=produce, name="aurelix-stream", daemon=True)
+    worker.start()
+
+    while True:
+        try:
+            item = channel.get(timeout=HEARTBEAT_SECONDS)
+        except queue.Empty:
+            yield _HEARTBEAT
+            continue
+        if item is _FINISHED:
+            return
+        if isinstance(item, BaseException):
+            raise item
+        yield item
 
 
 def execute_claim_sync(
@@ -259,11 +332,16 @@ def generate_claim_stream(
     """
     analysis: Optional[ClaimAnalysis] = None
     try:
-        for event in analyse_claim_events(
+        for event in _events_with_heartbeat(
             user_id=user_id, user_claim=user_claim, claim_object=claim_object,
             image_paths=image_paths, images=pil_images or None,
             image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
         ):
+            if event is _HEARTBEAT:
+                # An SSE comment. Invisible to the client's event handler, but it is bytes
+                # on the wire, which is the entire point — see _events_with_heartbeat.
+                yield ": keepalive\n\n"
+                continue
             if event["stage"] == "done":
                 analysis = event["analysis"]
                 continue

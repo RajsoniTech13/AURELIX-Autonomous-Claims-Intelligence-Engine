@@ -17,26 +17,26 @@ means a claim nobody ever sees.
 from __future__ import annotations
 
 import asyncio
-import datetime
-import io
 import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
-from PIL import Image
 from sqlalchemy.orm import Session
 
 from platform_backend.db.models import Claim, Job
 from platform_backend.db.session import get_db
 from platform_backend.services import jobs as job_service
+from platform_backend.services.claim_service import utc_iso
+from platform_backend.services.uploads import read_uploads
 
 router = APIRouter(prefix="/api/v1")
 
 # Poll interval for the SSE endpoint. The job row is the progress channel, so this is a
 # database read, not a model call.
 _STREAM_POLL_SECONDS = 0.4
-_STREAM_TIMEOUT_SECONDS = 300
+_STREAM_TIMEOUT_SECONDS = 600
+_HEARTBEAT_SECONDS = 15.0
 
 
 def _job_view(job: Job) -> Dict[str, Any]:
@@ -47,8 +47,8 @@ def _job_view(job: Job) -> Dict[str, Any]:
         "progress": job.progress or [],
         "claim_id": job.claim_id,
         "error": job.error,
-        "created_at": job.created_at.isoformat() if job.created_at else None,
-        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "created_at": utc_iso(job.created_at),
+        "finished_at": utc_iso(job.finished_at),
         "links": {
             "self": f"/api/v1/jobs/{job.id}",
             "stream": f"/api/v1/jobs/{job.id}/stream",
@@ -70,9 +70,10 @@ async def submit_claim(
     """
     Accept a claim for analysis. Returns 202 immediately; the work happens on a job.
 
-    Images are decoded here rather than on the worker so a malformed upload fails fast with
-    a 400 the client can act on, instead of becoming a job that fails asynchronously for a
-    reason the submitter never sees.
+    Images are decoded and persisted here rather than on the worker, so a malformed upload
+    fails fast with a 400 the client can act on instead of becoming a job that fails
+    asynchronously for a reason the submitter never sees. Caps and content sniffing live in
+    `services/uploads`, shared with the unversioned route.
     """
     if idempotency_key:
         existing = job_service.find_by_idempotency_key(db, user_id, idempotency_key)
@@ -83,26 +84,11 @@ async def submit_claim(
                 media_type="application/json", status_code=200,
             )
 
-    images: List[Image.Image] = []
-    names: List[str] = []
-    for upload in files:
-        if not upload.filename:
-            continue
-        raw = await upload.read()
-        try:
-            probe = Image.open(io.BytesIO(raw))
-            probe.verify()                      # verify() leaves the object unusable
-            images.append(Image.open(io.BytesIO(raw)))
-            names.append(upload.filename)
-        except Exception:  # noqa: BLE001
-            raise HTTPException(
-                status_code=400,
-                detail=f"'{upload.filename}' is not a readable image.",
-            )
+    images, image_paths = await read_uploads(files)
 
     payload = {
         "user_id": user_id, "user_claim": user_claim, "claim_object": claim_object,
-        "image_paths": ";".join(f"uploads/{n}" for n in names) if names else "none",
+        "image_paths": image_paths,
     }
     job = job_service.create_job(
         db, user_id=user_id, payload=payload, idempotency_key=idempotency_key,
@@ -136,6 +122,7 @@ async def stream_job(job_id: str, db: Session = Depends(get_db)):
     async def events():
         seen: Optional[str] = None
         waited = 0.0
+        quiet = 0.0
         while waited < _STREAM_TIMEOUT_SECONDS:
             session = job_service.SessionLocal()
             try:
@@ -145,6 +132,7 @@ async def stream_job(job_id: str, db: Session = Depends(get_db)):
                 snapshot = json.dumps(_job_view(job), sort_keys=True)
                 if snapshot != seen:
                     seen = snapshot
+                    quiet = 0.0
                     yield f"data: {snapshot}\n\n"
                 if job.status in job_service.TERMINAL_STATUSES:
                     return
@@ -152,6 +140,16 @@ async def stream_job(job_id: str, db: Session = Depends(get_db)):
                 session.close()
             await asyncio.sleep(_STREAM_POLL_SECONDS)
             waited += _STREAM_POLL_SECONDS
+            quiet += _STREAM_POLL_SECONDS
+
+            # The job row does not change for the length of the model call — measured at
+            # 12s on free quota and 185s under rate-limit backoff. A proxy that sees no
+            # bytes for its idle timeout (~100s on Render) closes the response, and the
+            # client watches a job that has in fact completed. An SSE comment is discarded
+            # by the browser's parser and keeps the connection provably alive.
+            if quiet >= _HEARTBEAT_SECONDS:
+                quiet = 0.0
+                yield ": keepalive\n\n"
 
         yield f'data: {json.dumps({"job_id": job_id, "status": "stream_timeout"})}\n\n'
 

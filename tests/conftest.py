@@ -35,3 +35,25 @@ def _isolated_image_index(tmp_path_factory):
         os.environ.pop("AURELIX_IMAGE_INDEX", None)
     else:
         os.environ["AURELIX_IMAGE_INDEX"] = previous
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upload_dir(tmp_path_factory):
+    """
+    Uploads land in a temporary directory too.
+
+    Claim photographs are now persisted so the review screen can display the evidence a
+    verdict was based on. That makes the upload directory the second mutating store the
+    suite could contaminate: without this, every test submission would leave a fixture
+    image sitting in the folder the production API serves from.
+    """
+    import os
+
+    target = tmp_path_factory.mktemp("uploads")
+    previous = os.environ.get("UPLOAD_DIR")
+    os.environ["UPLOAD_DIR"] = str(target)
+    yield
+    if previous is None:
+        os.environ.pop("UPLOAD_DIR", None)
+    else:
+        os.environ["UPLOAD_DIR"] = previous

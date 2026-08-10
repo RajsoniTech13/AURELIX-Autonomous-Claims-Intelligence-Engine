@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -40,6 +40,15 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
 
   const handleNext = () => setStep(s => Math.min(s + 1, 4));
   const handlePrev = () => setStep(s => Math.max(s - 1, 1));
+
+  const handleReset = () => {
+    setStep(1);
+    setStages(INITIAL_STAGES);
+    setClaimResult(null);
+    setError(null);
+    setUserClaim("");
+    setFiles([]);
+  };
 
   const handleSubmit = async () => {
     if (files.length === 0) {
@@ -88,15 +97,26 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
     return (
       <div className="space-y-4">
         {error && (
-          <div className="p-4 rounded-md bg-destructive/15 text-destructive border border-destructive/20 font-mono text-sm">
-            ERROR: {error}
+          <div className="p-4 rounded-md bg-destructive/15 text-destructive border border-destructive/20 text-sm flex items-start justify-between gap-4">
+            <div className="flex gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+            <button
+              onClick={handleReset}
+              className="shrink-0 border border-destructive/40 rounded px-3 py-1 text-xs font-medium hover:bg-destructive/10 transition-colors"
+            >
+              Start over
+            </button>
           </div>
         )}
-        <LiveInvestigationViewer 
-          stages={stages} 
+        <LiveInvestigationViewer
+          stages={stages}
           files={files}
           completedTime={startTime && !loading ? (performance.now() - startTime) / 1000 : undefined}
           claimResult={claimResult}
+          onOpenFullReport={() => claimResult && onClaimSubmitted(claimResult)}
+          onRestart={handleReset}
         />
       </div>
     );
@@ -140,9 +160,33 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
 
       <div className="bg-card border border-border/50 rounded-xl overflow-hidden shadow-lg shadow-black/20">
         <div className="p-8 min-h-[300px]">
-          <AnimatePresence mode="wait">
+          {/*
+            No AnimatePresence here, deliberately.
+
+            This wizard was unusable. The panels were four `&&` conditionals inside an
+            `AnimatePresence mode="wait"`, which is itself nested inside the page-level
+            `mode="wait"` in app/page.tsx. The outgoing panel's exit never completed, so the
+            incoming one never mounted: `step` climbed 1 → 2 → 3 → 4 with every press of
+            Continue while the screen kept rendering step 1. The fourth press ran a real
+            analysis, spending one of twenty daily requests, from a form the user had never
+            been shown. Keying a single child by `step` fixed the first transition and the
+            deadlock simply moved to the second.
+
+            `mode="wait"` buys a 180ms cross-fade. It is not worth a wizard that silently
+            advances behind the user's back, so the exit animation is gone and the panel
+            swaps on the key. Entry is still animated; nothing has to finish before the next
+            thing can start.
+          */}
+          <div>
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.18 }}
+              className="space-y-6"
+            >
             {step === 1 && (
-              <motion.div key="1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <>
                 <div>
                   <h3 className="text-lg font-medium text-foreground">Customer Context</h3>
                   <p className="text-xs text-muted-foreground">Used for history checks and fraud profiling.</p>
@@ -155,11 +199,11 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
                     className="max-w-sm bg-background border-border/50 focus-visible:ring-primary h-10"
                   />
                 </div>
-              </motion.div>
+              </>
             )}
 
             {step === 2 && (
-              <motion.div key="2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <>
                 <div>
                   <h3 className="text-lg font-medium text-foreground">Incident Details</h3>
                   <p className="text-xs text-muted-foreground">Classify the object and provide raw testimony.</p>
@@ -188,11 +232,11 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
                     />
                   </div>
                 </div>
-              </motion.div>
+              </>
             )}
 
             {step === 3 && (
-              <motion.div key="3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <>
                 <div>
                   <h3 className="text-lg font-medium text-foreground">Visual Evidence</h3>
                   <p className="text-xs text-muted-foreground">AURELIX Vision Agents require clear, well-lit photography.</p>
@@ -215,11 +259,11 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
                     </div>
                   )}
                 </div>
-              </motion.div>
+              </>
             )}
 
             {step === 4 && (
-              <motion.div key="4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <>
                 <div>
                   <h3 className="text-lg font-medium text-foreground">Final Verification</h3>
                   <p className="text-xs text-muted-foreground">Ready to deploy 7 autonomous agents.</p>
@@ -247,9 +291,10 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </>
             )}
-          </AnimatePresence>
+            </motion.div>
+          </div>
         </div>
         
         <div className="px-8 py-5 border-t border-border/50 bg-muted/5 flex items-center justify-between">

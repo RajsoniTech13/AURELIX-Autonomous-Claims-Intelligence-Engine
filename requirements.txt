@@ -1,0 +1,29 @@
+# AURELIX — the deployable dependency set (API + agent pipeline).
+#
+# `agent_core/requirements.txt` and `platform_backend/requirements.txt` describe the two
+# halves separately and are kept for local, single-component work. A host installs one file,
+# so this is that file, and it is the one Render builds from.
+#
+# Versions are the ones the 249-test suite actually passes against. Binary packages
+# (numpy, Pillow, OpenCV) are floored rather than pinned so pip resolves a wheel for
+# whatever interpreter the host runs — pinning them exactly is how a deploy ends up
+# compiling NumPy from source on a 0.1-CPU free-tier container.
+
+# ── API ─────────────────────────────────────────────────────────────────────
+fastapi==0.137.2
+uvicorn[standard]==0.49.0
+python-multipart==0.0.32
+sqlalchemy==2.0.51
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.2
+
+# ── Agent pipeline ──────────────────────────────────────────────────────────
+google-genai==2.9.0
+PyYAML==6.0.3
+rank-bm25==0.2.2
+Pillow>=11.0
+numpy>=2.0
+# Headless: the Phase 4.1 quality gate needs cv2.Laplacian, not a GUI toolkit. The non-
+# headless build pulls in X11 shared libraries that are not present in a slim container.
+opencv-python-headless>=4.10
