@@ -1,29 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { 
-  Activity, Clock, ShieldCheck, Zap, ArrowRight, 
-  Search, AlertTriangle, CheckCircle2, UserX, FileText
-} from "lucide-react";
+import { ArrowRight, FileText, Plus, AlertTriangle } from "lucide-react";
 import { getAnalytics, getClaims } from "@/lib/api";
+import {
+  ConfidenceMeter, DecisionBadge, EmptyState, SectionTitle, Skeleton,
+  StatusBadge, decisionTone, riskTone,
+} from "@/components/ui/status";
 
 /**
- * Every row in this table said "Just now" — a literal string, not a computed one, so a
- * claim from last week and one from ten seconds ago were indistinguishable.
+ * Relative time.
  *
- * The API now sends an explicit UTC offset. Without it `new Date()` reads the timestamp as
- * local time and every claim lands in the reader's own future, which is why this needs to
- * tolerate a small negative skew rather than printing "in 5 hours".
+ * Every row in this table used to say "Just now" — a literal string, so a claim
+ * from last week and one from ten seconds ago were indistinguishable. The API
+ * now sends an explicit UTC offset; without it `new Date()` reads the timestamp
+ * as local time and every claim lands in the reader's own future, which is why
+ * this tolerates a small negative skew rather than printing "in 5 hours".
  */
 function relativeTime(iso?: string | null): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
-
   const seconds = Math.round((Date.now() - then) / 1000);
   if (Math.abs(seconds) < 45) return "just now";
-
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["year", 31557600], ["month", 2629800], ["week", 604800],
     ["day", 86400], ["hour", 3600], ["minute", 60],
@@ -35,25 +34,51 @@ function relativeTime(iso?: string | null): string {
   return "just now";
 }
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-};
+/**
+ * A KPI. Four numbers that describe the state of the claim book — not
+ * "revenue", not invented growth percentages. Every value is read from
+ * `/analytics`; the tiles that used to read "2.4s", "-120ms vs yesterday" and
+ * "76.4%" were string literals.
+ */
+function Kpi({ label, value, sub, tone, onClick }: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "verified" | "contra" | "unknown" | "warning";
+  onClick?: () => void;
+}) {
+  const accent =
+    tone === "verified" ? "text-(--state-verified)"
+    : tone === "contra" ? "text-(--state-contra)"
+    : tone === "warning" ? "text-(--state-warning)"
+    : "text-foreground";
 
-const item = {
-  hidden: { opacity: 0, y: 10 },
-  show: { opacity: 1, y: 0 }
-};
+  const Tag: any = onClick ? "button" : "div";
+  return (
+    <Tag
+      onClick={onClick}
+      className={`bg-surface-1 text-left px-4 sm:px-5 py-3.5 min-w-0 w-full
+                  ${onClick ? "group cursor-pointer hover:bg-surface-2 transition-colors duration-(--dur-fast)" : ""}`}
+    >
+      <div className="label-meta mb-2">{label}</div>
+      <div className={`tnum text-2xl font-semibold tracking-tight leading-none ${accent}`}>{value}</div>
+      {sub && (
+        <div className="text-[11px] text-muted-foreground mt-2 leading-none flex items-center gap-1">
+          {sub}
+          {onClick && (
+            <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden />
+          )}
+        </div>
+      )}
+    </Tag>
+  );
+}
 
 export function HomeDashboard({
   onNavigate,
   onSelectClaim,
 }: {
   onNavigate: (tab: string) => void;
-  /** Open one claim's full investigation. Rows were styled as clickable and were not. */
   onSelectClaim?: (claimId: number) => void;
 }) {
   const [claims, setClaims] = useState<any[]>([]);
@@ -63,10 +88,10 @@ export function HomeDashboard({
 
   useEffect(() => {
     const load = async () => {
-      // Settled, not `all`: the recent-claims table and the KPI strip fail independently,
-      // and losing one should not blank the other.
+      // Settled, not `all`: the table and the KPI strip fail independently, and
+      // losing one should not blank the other.
       const [recent, analytics] = await Promise.allSettled([
-        getClaims({ limit: 8 }),
+        getClaims({ limit: 10 }),
         getAnalytics(),
       ]);
       if (recent.status === "fulfilled") setClaims(recent.value);
@@ -77,191 +102,197 @@ export function HomeDashboard({
     load();
   }, []);
 
-  const kpi = (pick: (k: any) => number) => (stats ? pick(stats.kpis) : "—");
-
-  const automationRate =
-    stats && stats.kpis.total_claims > 0
-      ? ((stats.kpis.total_claims - stats.kpis.manual_review_claims) /
-          stats.kpis.total_claims) *
-        100
-      : null;
-
-  const getStatusIcon = (status: string) => {
-    switch(status) {
-      case "supported": return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-      case "contradicted": return <AlertTriangle className="h-4 w-4 text-destructive" />;
-      case "not_enough_information": return <UserX className="h-4 w-4 text-amber-500" />;
-      default: return <Activity className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
+  const k = stats?.kpis;
+  const total = k?.total_claims ?? 0;
 
   return (
-    <motion.div 
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className="space-y-8"
-    >
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-7">
+      {/* ── Page header ────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <motion.h1 variants={item} className="text-2xl font-semibold tracking-tight mb-1">
-            Welcome back, System Admin
-          </motion.h1>
-          <motion.p variants={item} className="text-sm text-muted-foreground">
-            AURELIX AI Orchestration Platform is online and processing claims.
-          </motion.p>
+          <h1 className="text-xl font-semibold tracking-tight">Claims Intelligence</h1>
+          <p className="text-[13px] text-muted-foreground mt-1 max-w-xl leading-relaxed">
+            Autonomous verification of damage claims. Every decision is produced by
+            deterministic rules over model observations, and every rule is recorded.
+          </p>
         </div>
-        <motion.div variants={item} className="flex items-center gap-3">
-          <button 
-            onClick={() => onNavigate("submit")}
-            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
-          >
-            <Zap className="h-4 w-4" />
-            New Investigation
-          </button>
-        </motion.div>
+        <button
+          onClick={() => onNavigate("submit")}
+          className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md bg-(--aurelix-accent)
+                     hover:bg-(--aurelix-accent-hover) text-(--primary-foreground) text-[13px]
+                     font-medium transition-colors duration-(--dur-fast) shrink-0 self-start sm:self-auto"
+        >
+          <Plus className="h-4 w-4" aria-hidden /> New investigation
+        </button>
       </div>
 
-      {/* Every tile here read from a string literal: "2.4s", "-120ms vs yesterday",
-          "76.4%", "14". They are now computed from GET /analytics. A claims product that
-          invents its own operating numbers is the same failure as one that invents a
-          verdict, just further from the eye. */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Claims Analysed</span>
-            <FileText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight">{kpi(k => k.total_claims)}</div>
-          <div className="text-xs text-muted-foreground mt-2">
-            {stats ? `${stats.kpis.supported_claims} supported · ${stats.kpis.contradicted_claims} contradicted` : "—"}
-          </div>
-        </motion.div>
+      {/*
+        KPI band.
 
-        <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Automation Rate</span>
-            <Activity className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-emerald-500">
-            {automationRate === null ? "—" : `${automationRate.toFixed(1)}%`}
-          </div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Resolved without human review
-          </div>
-        </motion.div>
-
-        <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors cursor-pointer" onClick={() => onNavigate("queue")}>
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Manual Review</span>
-            <ShieldCheck className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-amber-500">{kpi(k => k.pending_review_claims)}</div>
-          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1 hover:text-foreground transition-colors">
-            View queue <ArrowRight className="h-3 w-3" />
-          </div>
-        </motion.div>
-
-        <motion.div variants={item} className="bg-card border border-border/50 rounded-lg p-5 group hover:border-border transition-colors cursor-pointer" onClick={() => onNavigate("analytics")}>
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg Confidence</span>
-            <Zap className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight">
-            {stats ? `${stats.kpis.average_confidence}%` : "—"}
-          </div>
-          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1 hover:text-foreground transition-colors">
-            View system metrics <ArrowRight className="h-3 w-3" />
-          </div>
-        </motion.div>
-      </div>
-
-      <motion.div variants={item} className="bg-card border border-border/50 rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
-          <h3 className="text-sm font-medium">Recent Investigations</h3>
-          <button 
-            onClick={() => onNavigate("review")}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-          >
-            View all <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-        
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading investigations…</div>
-        ) : error ? (
-          // The fetch error was captured into state and never rendered, so a backend that
-          // was down produced an empty table indistinguishable from "no claims yet".
-          <div className="p-8 text-center flex flex-col items-center">
-            <AlertTriangle className="h-8 w-8 mb-3 text-destructive/60" />
-            <p className="text-sm font-medium text-foreground">Could not load investigations</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md leading-relaxed">{error}</p>
-          </div>
-        ) : claims.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center">
-            <FileText className="h-8 w-8 mb-3 opacity-20" />
-            No recent investigations found.
-          </div>
-        ) : (
-          <div className="divide-y divide-border/30">
-            <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-muted/10 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              <div className="col-span-2">ID / Time</div>
-              <div className="col-span-4">Object</div>
-              <div className="col-span-3">Decision</div>
-              <div className="col-span-2">Confidence</div>
-              <div className="col-span-1 text-right">Escalated</div>
-            </div>
-            {claims.map((claim) => (
-              <div
-                key={claim.id}
-                onClick={() => onSelectClaim?.(claim.id)}
-                className="grid grid-cols-12 gap-4 px-5 py-3 items-center text-sm hover:bg-muted/5 transition-colors cursor-pointer"
-              >
-                <div className="col-span-2 flex flex-col">
-                  <span className="font-mono text-xs">INV-{claim.id.toString().padStart(4, '0')}</span>
-                  <span
-                    className="text-xs text-muted-foreground"
-                    title={claim.created_at ? new Date(claim.created_at).toLocaleString() : ""}
-                  >
-                    {relativeTime(claim.created_at)}
-                  </span>
-                </div>
-                <div className="col-span-4 flex items-center gap-3">
-                  <div className="h-8 w-8 rounded bg-muted/20 border border-border/50 flex items-center justify-center shrink-0">
-                    <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  <div className="flex flex-col truncate">
-                    <span className="font-medium truncate">{claim.claim_object.charAt(0).toUpperCase() + claim.claim_object.slice(1)}</span>
-                    <span className="text-xs text-muted-foreground truncate">{claim.user_id}</span>
-                  </div>
-                </div>
-                <div className="col-span-3 flex items-center gap-2">
-                  {getStatusIcon(claim.claim_status)}
-                  <span className="capitalize">{claim.claim_status.replace(/_/g, ' ')}</span>
-                </div>
-                <div className="col-span-2 flex items-center gap-2">
-                  <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${claim.confidence_score >= 90 ? 'bg-emerald-500' : claim.confidence_score >= 70 ? 'bg-amber-500' : 'bg-destructive'}`}
-                      style={{ width: `${claim.confidence_score}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium">{claim.confidence_score}%</span>
-                </div>
-                <div className="col-span-1 text-right">
-                  {claim.manual_review_required ? (
-                    <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-amber-500/10 text-amber-500">
-                      <ShieldCheck className="h-3 w-3" />
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </div>
+        `divide-x divide-y` on a wrapping grid draws dividers per DOM order, not
+        per visual position — at two columns that left a border hanging off the
+        first cell and none under the last, which is the mess in the 2×2 layout.
+        A 1px gap over a line-coloured background paints the separators from the
+        grid itself, so it is correct at any column count.
+      */}
+      <div className="rounded-lg border border-line bg-line overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-surface-1 px-4 sm:px-5 py-3.5">
+                <Skeleton className="h-2.5 w-20 mb-3" />
+                <Skeleton className="h-6 w-14" />
               </div>
-            ))}
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
+            ))
+          ) : (
+            <>
+              <Kpi
+                label="Investigations"
+                value={total}
+                sub={`${k?.pending_review_claims ?? 0} awaiting review`}
+              />
+              <Kpi
+                label="Supported"
+                value={k?.supported_claims ?? 0}
+                tone="verified"
+                sub={total ? `${Math.round(((k?.supported_claims ?? 0) / total) * 100)}% of total` : "—"}
+              />
+              <Kpi
+                label="Contradicted"
+                value={k?.contradicted_claims ?? 0}
+                tone="contra"
+                sub={total ? `${Math.round(((k?.contradicted_claims ?? 0) / total) * 100)}% of total` : "—"}
+              />
+              <Kpi
+                label="Insufficient evidence"
+                value={k?.not_enough_info_claims ?? 0}
+                sub={`avg confidence ${k?.average_confidence ?? 0}%`}
+              />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Recent investigations ──────────────────────────────────────── */}
+      <section>
+        <SectionTitle
+          action={
+            claims.length > 0 && (
+              <button
+                onClick={() => onNavigate("queue")}
+                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1
+                           transition-colors duration-(--dur-fast)"
+              >
+                Review queue <ArrowRight className="h-3 w-3" aria-hidden />
+              </button>
+            )
+          }
+        >
+          Recent investigations
+        </SectionTitle>
+
+        <div className="rounded-lg border border-line bg-surface-1 overflow-hidden">
+          {loading ? (
+            <div className="divide-y divide-line">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 flex-1 max-w-[220px]" />
+                  <Skeleton className="h-3 w-24 ml-auto" />
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <EmptyState
+              icon={AlertTriangle}
+              title="Could not load investigations"
+              description={error}
+            />
+          ) : claims.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No investigations yet"
+              description="Start your first investigation to begin building the claims evidence record."
+              action={
+                <button
+                  onClick={() => onNavigate("submit")}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-md bg-(--aurelix-accent)
+                             hover:bg-(--aurelix-accent-hover) text-(--primary-foreground) text-[13px] font-medium
+                             transition-colors duration-(--dur-fast)"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden /> New investigation
+                </button>
+              }
+            />
+          ) : (
+            /* The table is wider than a phone. It scrolls inside its own
+               container so the page never does — but a hard clip at the card
+               edge reads as broken layout rather than as scrollable, so the
+               right edge fades to signal there is more. */
+            <div
+              className="overflow-x-auto
+                         [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)]
+                         lg:[mask-image:none]"
+            >
+              <table className="w-full min-w-[760px] text-[13px]">
+                <thead>
+                  <tr className="border-b border-line">
+                    {["Claim", "Policyholder", "Object", "Submitted", "Decision", "Confidence", "Review"].map(h => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="label-meta text-left font-medium px-4 py-2.5 whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {claims.map(c => (
+                    <tr
+                      key={c.id}
+                      tabIndex={0}
+                      role="button"
+                      onClick={() => onSelectClaim?.(c.id)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectClaim?.(c.id); }
+                      }}
+                      className="cursor-pointer hover:bg-surface-2/70 transition-colors duration-(--dur-fast)
+                                 focus:outline-none focus-visible:bg-surface-2"
+                    >
+                      <td className="px-4 py-2.5 tnum font-medium whitespace-nowrap">
+                        INV-{String(c.id).padStart(4, "0")}
+                      </td>
+                      <td className="px-4 py-2.5 text-text-2 whitespace-nowrap">{c.user_id}</td>
+                      <td className="px-4 py-2.5 text-text-2 capitalize whitespace-nowrap">{c.claim_object}</td>
+                      <td
+                        className="px-4 py-2.5 text-muted-foreground whitespace-nowrap"
+                        title={c.created_at ? new Date(c.created_at).toLocaleString() : ""}
+                      >
+                        {relativeTime(c.created_at)}
+                      </td>
+                      <td className="px-4 py-2.5"><DecisionBadge status={c.claim_status} /></td>
+                      <td className="px-4 py-2.5"><ConfidenceMeter value={c.confidence_score} /></td>
+                      <td className="px-4 py-2.5">
+                        {c.manual_verdict ? (
+                          <StatusBadge tone={c.manual_verdict === "approved" ? "verified" : "contra"}>
+                            {c.manual_verdict === "approved" ? "Approved" : "Rejected"}
+                          </StatusBadge>
+                        ) : c.manual_review_required ? (
+                          <StatusBadge tone="warning">Pending</StatusBadge>
+                        ) : (
+                          <span className="text-muted-foreground">Automatic</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }

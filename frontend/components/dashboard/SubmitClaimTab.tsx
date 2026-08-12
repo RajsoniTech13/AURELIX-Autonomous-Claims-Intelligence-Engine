@@ -25,7 +25,13 @@ const INITIAL_STAGES: PipelineStages = {
   decision: "pending"
 };
 
-export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim: any) => void }) {
+export function SubmitClaimTab({
+  onClaimSubmitted,
+  onNavigate,
+}: {
+  onClaimSubmitted: (claim: any) => void;
+  onNavigate?: (tab: string) => void;
+}) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +44,24 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
   const [userClaim, setUserClaim] = useState("");
   const [files, setFiles] = useState<File[]>([]);
 
-  const handleNext = () => setStep(s => Math.min(s + 1, 4));
+  /**
+   * Per-step validity.
+   *
+   * Submission used to validate only at the end, then throw the user back to
+   * step 2 or 3 with "Description required." — a bare fragment, after they had
+   * already reached the launch screen. Each step now states its own requirement
+   * and the Continue button reflects it, so the wizard cannot be completed into
+   * a failure.
+   */
+  const stepIssue = (s: number): string | null => {
+    if (s === 1 && !userId.trim()) return "Enter the policyholder ID to continue.";
+    if (s === 2 && !userClaim.trim()) return "Describe what happened to continue.";
+    if (s === 3 && files.length === 0) return "Attach at least one photograph to continue.";
+    return null;
+  };
+  const blocked = stepIssue(step);
+
+  const handleNext = () => { if (!blocked) setStep(s => Math.min(s + 1, 4)); };
   const handlePrev = () => setStep(s => Math.max(s - 1, 1));
 
   const handleReset = () => {
@@ -51,15 +74,12 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
   };
 
   const handleSubmit = async () => {
-    if (files.length === 0) {
-      setError("Evidence required.");
-      setStep(3);
-      return;
-    }
-    if (!userClaim.trim()) {
-      setError("Description required.");
-      setStep(2);
-      return;
+    // Belt and braces: the wizard cannot normally reach step 4 in an invalid
+    // state, but a jump would otherwise spend a model request on a claim that
+    // has nothing to analyse.
+    for (const s of [1, 2, 3]) {
+      const issue = stepIssue(s);
+      if (issue) { setError(issue); setStep(s); return; }
     }
 
     setStep(5); // Live Investigation
@@ -77,18 +97,15 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
 
     try {
       await submitClaimStream(formData, (event) => {
-        console.log("[SSE Event Received]:", event);
         if (event.stage === "done") {
-          console.log("[SSE] Done! Setting claim result.");
           setLoading(false);
           setClaimResult(event.claim);
         } else if (event.stage && event.status) {
-          console.log(`[SSE] Updating stage ${event.stage} to ${event.status}`);
           setStages(prev => ({ ...prev, [event.stage]: event.status }));
         }
       });
     } catch (err: any) {
-      setError(err.message || "Investigation failed.");
+      setError(err?.message || "The investigation could not be completed.");
       setLoading(false);
     }
   };
@@ -96,15 +113,25 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
   if (step === 5) {
     return (
       <div className="space-y-4">
+        {/* An error state that says what happened, what it means for the data,
+            and what to do — not a red bar with an exception in it. */}
         {error && (
-          <div className="p-4 rounded-md bg-destructive/15 text-destructive border border-destructive/20 text-sm flex items-start justify-between gap-4">
-            <div className="flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{error}</span>
+          <div className="rounded-lg border border-(--state-contra)/25 bg-(--state-contra-weak) p-4
+                          flex flex-col sm:flex-row sm:items-start gap-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-(--state-contra)" aria-hidden />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-(--state-contra)">
+                Investigation could not be completed
+              </p>
+              <p className="text-[13px] leading-relaxed text-text-2 mt-1">{error}</p>
+              <p className="text-[12px] text-muted-foreground mt-1.5">
+                No decision was recorded. Your evidence and description are still attached.
+              </p>
             </div>
             <button
               onClick={handleReset}
-              className="shrink-0 border border-destructive/40 rounded px-3 py-1 text-xs font-medium hover:bg-destructive/10 transition-colors"
+              className="shrink-0 h-8 px-3 rounded-md border border-line hover:bg-surface-2 text-[13px]
+                         font-medium transition-colors duration-(--dur-fast)"
             >
               Start over
             </button>
@@ -297,32 +324,51 @@ export function SubmitClaimTab({ onClaimSubmitted }: { onClaimSubmitted: (claim:
           </div>
         </div>
         
-        <div className="px-8 py-5 border-t border-border/50 bg-muted/5 flex items-center justify-between">
-          <button 
-            onClick={handlePrev} 
+        <div className="px-5 sm:px-8 py-5 border-t border-border/50 bg-muted/5 flex items-center justify-between gap-4">
+          <button
+            onClick={handlePrev}
             disabled={step === 1}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground
+                       disabled:opacity-40 disabled:pointer-events-none transition-colors duration-(--dur-fast)"
           >
-            <ChevronLeft className="h-4 w-4" /> Back
+            <ChevronLeft className="h-4 w-4" aria-hidden /> Back
           </button>
-          
-          {step < 4 ? (
-            <button 
-              onClick={handleNext}
-              className="flex items-center gap-2 bg-foreground text-background hover:bg-foreground/90 px-5 py-2 rounded-md text-sm font-medium transition-colors"
-            >
-              Continue <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button 
-              onClick={handleSubmit}
-              className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2 rounded-md text-sm font-semibold transition-colors shadow-lg shadow-primary/20"
-            >
-              Launch Agents <Zap className="h-4 w-4" />
-            </button>
-          )}
+
+          <div className="flex items-center gap-3 min-w-0">
+            {/* The requirement, stated next to the control it blocks, rather
+                than discovered after pressing Launch. */}
+            {blocked && (
+              <span className="text-[12px] text-muted-foreground hidden sm:block truncate">{blocked}</span>
+            )}
+            {step < 4 ? (
+              <button
+                onClick={handleNext}
+                disabled={!!blocked}
+                aria-describedby={blocked ? "step-requirement" : undefined}
+                className="flex items-center gap-2 bg-foreground text-background hover:bg-foreground/90
+                           disabled:opacity-40 disabled:pointer-events-none px-5 py-2 rounded-md text-sm
+                           font-medium transition-colors duration-(--dur-fast) shrink-0"
+              >
+                Continue <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-(--aurelix-accent-hover)
+                           px-6 py-2 rounded-md text-sm font-semibold transition-colors duration-(--dur-fast) shrink-0"
+              >
+                Launch Agents <Zap className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {blocked && (
+        <p id="step-requirement" className="sm:hidden text-[12px] text-muted-foreground mt-3 text-center">
+          {blocked}
+        </p>
+      )}
     </div>
   );
 }

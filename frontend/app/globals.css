@@ -4,58 +4,200 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURELIX design tokens
+
+   One source of truth. Changing the accent here changes every interactive
+   surface in the product.
+
+   Two rules this system enforces:
+
+   1. **Colour carries meaning, never decoration.** Blue is interaction. Green
+      is verified. Amber needs attention. Red is a contradiction. Grey is the
+      absence of a reading. Nothing is coloured to look interesting.
+
+   2. **Elevation is built from four neutral surfaces**, not from shadows and
+      blur. An investigation console is read for hours; layered neutrals stay
+      legible where glass and glow do not.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Light theme ───────────────────────────────────────────────────────────
+   The same ramp inverted, not a different design. Surfaces stay very close
+   together (98% → 93% lightness) because an investigation console reads as
+   cheap the moment panels start looking like grey boxes on white. Accent and
+   state colours are darkened so they hold contrast on light backgrounds — the
+   dark-mode green is unreadable on white. */
 :root {
-  --card: oklch(1 0 0);
-  --card-hover: #1b1e26;
-  --border: oklch(0.922 0 0);
-  --primary: oklch(0.205 0 0); /* Violet */
-  --primary-hover: #7c3aed;
-  --accent: oklch(0.97 0 0); /* Emerald */
-  --muted: oklch(0.97 0 0);
-  --danger: #ef4444;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --aurelix-bg:        oklch(0.975 0.002 265);
+  --aurelix-surface-1: oklch(1 0 0);
+  --aurelix-surface-2: oklch(0.965 0.003 265);
+  --aurelix-surface-3: oklch(0.935 0.004 265);
+
+  --aurelix-line:        oklch(0.90 0.004 265);
+  --aurelix-line-strong: oklch(0.84 0.006 265);
+
+  --aurelix-text:       oklch(0.22 0.010 265);
+  --aurelix-text-2:     oklch(0.42 0.012 265);
+  --aurelix-text-muted: oklch(0.56 0.012 265);
+
+  --aurelix-accent:       oklch(0.52 0.175 274);
+  --aurelix-accent-hover: oklch(0.46 0.180 274);
+  --aurelix-accent-weak:  oklch(0.52 0.175 274 / 0.10);
+  --aurelix-accent-line:  oklch(0.52 0.175 274 / 0.30);
+
+  --state-verified:      oklch(0.52 0.140 158);
+  --state-verified-weak: oklch(0.52 0.140 158 / 0.10);
+  --on-verified:         oklch(0.99 0 0);
+  --state-warning:       oklch(0.56 0.130 68);
+  --state-warning-weak:  oklch(0.56 0.130 68 / 0.10);
+  --state-contra:        oklch(0.52 0.190 25);
+  --state-contra-weak:   oklch(0.52 0.190 25 / 0.10);
+  --state-unknown:       oklch(0.52 0.012 265);
+  --state-unknown-weak:  oklch(0.52 0.012 265 / 0.10);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 240ms;
+
+  /* ── Radius: deliberately tight. Enterprise tables and dense panels read as
+     sloppy at 16–24px. 6px base, nothing above 12px. ── */
+  --radius: 0.375rem;
+
+  /* ── shadcn bindings. Declared once, in terms of the AURELIX tokens, so the
+     dark block only has to override the ramp. ── */
+  --background: var(--aurelix-bg);
+  --foreground: var(--aurelix-text);
+  --card: var(--aurelix-surface-1);
+  --card-foreground: var(--aurelix-text);
+  --popover: var(--aurelix-surface-1);
+  --popover-foreground: var(--aurelix-text);
+  --primary: var(--aurelix-accent);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: var(--aurelix-surface-2);
+  --secondary-foreground: var(--aurelix-text);
+  --muted: var(--aurelix-surface-2);
+  --muted-foreground: var(--aurelix-text-muted);
+  --accent: var(--aurelix-surface-3);
+  --accent-foreground: var(--aurelix-text);
+  --destructive: var(--state-contra);
+  --border: var(--aurelix-line);
+  --input: var(--aurelix-line);
+  --ring: var(--aurelix-accent);
+  --sidebar: var(--aurelix-surface-1);
+  --sidebar-foreground: var(--aurelix-text);
+  --sidebar-primary: var(--aurelix-accent);
+  --sidebar-primary-foreground: var(--aurelix-text);
+  --sidebar-accent: var(--aurelix-surface-2);
+  --sidebar-accent-foreground: var(--aurelix-text);
+  --sidebar-border: var(--aurelix-line);
+  --sidebar-ring: var(--aurelix-accent);
+  --chart-1: var(--aurelix-accent);
+  --chart-2: var(--state-verified);
+  --chart-3: var(--state-warning);
+  --chart-4: var(--state-contra);
+  --chart-5: var(--aurelix-text-muted);
+}
+
+.dark {
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+     A four-step neutral ramp with a trace of blue, so the UI reads cool and
+     technical rather than muddy. Never pure black: #000 kills the sense of
+     depth and makes borders float. */
+  --aurelix-bg:        oklch(0.155 0.006 265);   /* application canvas      */
+  --aurelix-surface-1: oklch(0.186 0.007 265);   /* panels, sidebar         */
+  --aurelix-surface-2: oklch(0.221 0.008 265);   /* raised: rows, inputs    */
+  --aurelix-surface-3: oklch(0.262 0.009 265);   /* hover, active           */
+
+  /* ── Borders: hairlines. Visible enough to divide, quiet enough to ignore. */
+  --aurelix-line:        oklch(0.30 0.008 265);
+  --aurelix-line-strong: oklch(0.38 0.010 265);
+
+  /* ── Text ramp ── */
+  --aurelix-text:       oklch(0.97 0.002 265);
+  --aurelix-text-2:     oklch(0.76 0.010 265);
+  --aurelix-text-muted: oklch(0.60 0.012 265);
+
+  /* ── Accent: AURELIX periwinkle. Interaction only. ── */
+  --aurelix-accent:       oklch(0.66 0.145 274);
+  --aurelix-accent-hover: oklch(0.71 0.150 274);
+  --aurelix-accent-weak:  oklch(0.66 0.145 274 / 0.12);
+  --aurelix-accent-line:  oklch(0.66 0.145 274 / 0.35);
+
+  /* ── Semantic state. Each maps to one decision outcome. ── */
+  --state-verified:      oklch(0.72 0.155 158);  /* supported            */
+  --state-verified-weak: oklch(0.72 0.155 158 / 0.12);
+  /* Text on a solid verified fill — the only place a state colour is used as a
+     background large enough to need its own foreground. */
+  --on-verified:         oklch(0.22 0.045 165);
+  --state-warning:       oklch(0.79 0.150 78);   /* needs attention      */
+  --state-warning-weak:  oklch(0.79 0.150 78 / 0.12);
+  --state-contra:        oklch(0.65 0.190 22);   /* contradicted         */
+  --state-contra-weak:   oklch(0.65 0.190 22 / 0.12);
+  --state-unknown:       oklch(0.65 0.012 265);  /* insufficient         */
+  --state-unknown-weak:  oklch(0.65 0.012 265 / 0.12);
+
+  --primary-foreground: oklch(0.16 0.01 265);
+
+  /* ── shadcn bindings ── */
+  --background: var(--aurelix-bg);
+  --foreground: var(--aurelix-text);
+  --card: var(--aurelix-surface-1);
+  --card-foreground: var(--aurelix-text);
+  --popover: var(--aurelix-surface-2);
+  --popover-foreground: var(--aurelix-text);
+  --primary: var(--aurelix-accent);
+  --primary-foreground: oklch(0.16 0.01 265);
+  --secondary: var(--aurelix-surface-2);
+  --secondary-foreground: var(--aurelix-text);
+  --muted: var(--aurelix-surface-2);
+  --muted-foreground: var(--aurelix-text-muted);
+  --accent: var(--aurelix-surface-3);
+  --accent-foreground: var(--aurelix-text);
+  --destructive: var(--state-contra);
+  --border: var(--aurelix-line);
+  --input: var(--aurelix-line);
+  --ring: var(--aurelix-accent);
+  --sidebar: var(--aurelix-surface-1);
+  --sidebar-foreground: var(--aurelix-text);
+  --sidebar-primary: var(--aurelix-accent);
+  --sidebar-primary-foreground: var(--aurelix-text);
+  --sidebar-accent: var(--aurelix-surface-2);
+  --sidebar-accent-foreground: var(--aurelix-text);
+  --sidebar-border: var(--aurelix-line);
+  --sidebar-ring: var(--aurelix-accent);
+
+  /* Charts: one accent plus semantic state. No rainbow. */
+  --chart-1: var(--aurelix-accent);
+  --chart-2: var(--state-verified);
+  --chart-3: var(--state-warning);
+  --chart-4: var(--state-contra);
+  --chart-5: var(--aurelix-text-muted);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-card-hover: var(--card-hover);
   --color-border: var(--border);
   --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
   --color-accent: var(--accent);
   --color-muted: var(--muted);
-  --color-danger: var(--danger);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --color-surface-1: var(--aurelix-surface-1);
+  --color-surface-2: var(--aurelix-surface-2);
+  --color-surface-3: var(--aurelix-surface-3);
+  --color-line: var(--aurelix-line);
+  --color-line-strong: var(--aurelix-line-strong);
+  --color-text-2: var(--aurelix-text-2);
+
+  --color-verified: var(--state-verified);
+  --color-warning: var(--state-warning);
+  --color-contra: var(--state-contra);
+  --color-unknown: var(--state-unknown);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -80,167 +222,115 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 0.75rem;
 }
 
+/* ── Application canvas ─────────────────────────────────────────────────────
+   Depth without decoration: one very wide, very low-opacity wash behind the
+   workspace. No blobs, no visible gradient edge. If you can point at it, it is
+   too strong. */
 body {
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background-color: var(--aurelix-bg);
+  background-image: radial-gradient(
+    115% 85% at 50% -25%,
+    var(--canvas-wash) 0%,
+    transparent 62%
+  );
+  background-attachment: fixed;
+  color-scheme: light;
+}
+.dark body { color-scheme: dark; }
+
+/* One wide, very low-opacity wash for depth. Stronger on light, where a tint
+   is barely perceptible, than on dark where it would read as a glow. */
+:root { --canvas-wash: oklch(0.52 0.175 274 / 0.055); --skeleton-sweep: oklch(0 0 0 / 0.05); }
+.dark { --canvas-wash: oklch(0.66 0.145 274 / 0.05); --skeleton-sweep: oklch(1 0 0 / 0.04); }
+
+/* Numerals must line up in tables, KPI tiles and traces. */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Metadata label: the only place uppercase is used. */
+.label-meta {
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--aurelix-text-muted);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #090a0c;
-}
+/* ── Scrollbars: present but recessive ── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #22252e;
-  border-radius: 3px;
+  background: var(--aurelix-surface-3);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #333846;
+::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--aurelix-line-strong); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes shimmerSweep { 100% { transform: translateX(100%) } }
+@keyframes softPulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.45 } }
+
+.animate-fadeIn { animation: fadeIn var(--dur-base) var(--ease-out) both; }
+.animate-riseIn { animation: riseIn var(--dur-slow) var(--ease-out) both; }
+.animate-softPulse { animation: softPulse 1.8s ease-in-out infinite; }
+
+/* Skeletons match final layout; they never bounce or glow. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--aurelix-surface-2);
+  border-radius: var(--radius-sm);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--skeleton-sweep), transparent);
+  animation: shimmerSweep 1.6s infinite;
 }
 
-/* ───────────────── Animations ───────────────── */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.35); }
-  70%  { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
-}
-@keyframes spin-slow {
-  to { transform: rotate(360deg); }
-}
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-@keyframes glow-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
-}
-@keyframes typing-dots {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
-}
-
-.animate-fadeInUp {
-  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.animate-fadeIn {
-  animation: fadeIn 0.35s ease forwards;
-}
-.animate-slideInRight {
-  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.animate-pulse-ring {
-  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-.animate-spin-slow {
-  animation: spin-slow 3s linear infinite;
-}
-.animate-shimmer {
-  background: linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.08) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: shimmer 2s ease-in-out infinite;
-}
-.animate-glow-pulse {
-  animation: glow-pulse 2s ease-in-out infinite;
-}
-.animate-typing-dots {
-  animation: typing-dots 1.4s ease-in-out infinite;
-}
-
-/* Staggered children */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
-
-/* Glass morphism card */
-.glass-card {
-  background: rgba(19, 21, 26, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(34, 37, 46, 0.6);
-}
-
-/* Score ring */
-.score-ring {
-  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Drop zone styles */
-.drop-zone-active {
-  border-color: var(--primary) !important;
-  background: rgba(139, 92, 246, 0.04) !important;
-}
-
-.dark {
-  --background: oklch(0.13 0 0); /* Zinc 950 */
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.15 0 0); /* Zinc 900 */
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.15 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.6 0.1 270); /* Subtle Indigo */
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.20 0 0); /* Zinc 800 */
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.20 0 0);
-  --muted-foreground: oklch(0.7 0 0);
-  --accent: oklch(0.20 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.5 0.2 20); /* Red */
-  --border: oklch(0.25 0 0);
-  --input: oklch(0.25 0 0);
-  --ring: oklch(0.6 0.1 270);
-  --chart-1: oklch(0.6 0.1 270);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.11 0 0); /* Slightly darker than bg for contrast */
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.1 270);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.15 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.20 0 0);
-  --sidebar-ring: oklch(0.6 0.1 270);
-}
-
+/* ── Focus: one visible, consistent ring everywhere ── */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+  html { @apply font-sans; }
+
+  :focus-visible {
+    outline: 2px solid var(--aurelix-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  ::selection {
+    background: var(--aurelix-accent-weak);
+    color: var(--aurelix-text);
   }
-  html {
-    @apply font-sans;
+}
+
+/* Respect the system setting rather than assuming everyone enjoys motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+  .skeleton::after { animation: none; }
 }

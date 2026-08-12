@@ -1,332 +1,237 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  CheckCircle2, Clock, ShieldCheck, AlertTriangle, UserX, 
-  Search, FileText, Image as ImageIcon, Check, Activity, Code,
-  ArrowRight, RotateCcw
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight, Check, ChevronRight, Loader2, Minus, RotateCcw, X, AlertTriangle,
 } from "lucide-react";
+import { ConfidenceMeter, StatusDot, decisionLabel, decisionTone, riskTone } from "@/components/ui/status";
 
-// `skipped` is a real outcome, not an error: when preflight finds no usable image the
-// perception request is never made, because a claim with nothing to look at cannot
-// produce a grounded finding. Showing it as skipped rather than complete keeps the UI
-// honest about which claims actually cost a model call.
+/**
+ * `skipped` is a real outcome, not an error: when preflight finds no usable
+ * image the perception request is never made, because a claim with nothing to
+ * look at cannot produce a grounded finding. Showing it as skipped rather than
+ * complete keeps the trace honest about which claims cost a model call.
+ */
 type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
 type PipelineStages = Record<string, StageStatus>;
 
-interface LiveInvestigationViewerProps {
+interface Props {
   stages: PipelineStages;
-  claimId?: string;
   files: File[];
   completedTime?: number;
   claimResult?: any;
-  /** Hand the finished claim to the full investigation view. */
   onOpenFullReport?: () => void;
-  /** Clear the wizard and start a new submission. */
   onRestart?: () => void;
 }
 
-const nodeVariants = {
-  hidden: { opacity: 0, scale: 0.9 },
-  visible: { opacity: 1, scale: 1 },
-  active: { scale: 1.05, boxShadow: "0px 0px 15px rgba(139, 92, 246, 0.4)" }
-};
+/**
+ * The stage list, in execution order, with what each one actually does.
+ *
+ * `network: true` marks the single stage that leaves the machine — the whole
+ * architecture is built around there being exactly one, and the trace should
+ * make that visible rather than implying seven model calls.
+ */
+const STAGES: { id: string; label: string; detail: string; network?: boolean }[] = [
+  { id: "preflight",           label: "Preflight",           detail: "Decoding evidence, measuring blur and exposure" },
+  { id: "duplicate_check",     label: "Duplicate check",     detail: "Fingerprinting against previously submitted photographs" },
+  { id: "perception",          label: "Perception",          detail: "Reading the photographs and the statement", network: true },
+  { id: "policy_verification", label: "Policy verification", detail: "Checking evidence requirements for this object" },
+  { id: "user_risk",           label: "Risk profile",        detail: "Evaluating claim history and velocity" },
+  { id: "alignment",           label: "Alignment",           detail: "Comparing what was claimed with what was observed" },
+  { id: "decision",            label: "Decision",            detail: "Scoring fraud and confidence, applying ordered rules" },
+];
 
-const lineVariants = {
-  hidden: { pathLength: 0, opacity: 0 },
-  visible: { pathLength: 1, opacity: 1, transition: { duration: 0.5 } }
-};
+function StageIcon({ status }: { status: StageStatus }) {
+  if (status === "running") return <Loader2 className="h-3.5 w-3.5 animate-spin text-(--aurelix-accent)" aria-hidden />;
+  if (status === "complete") return <Check className="h-3.5 w-3.5 text-(--state-verified)" aria-hidden />;
+  if (status === "failed") return <X className="h-3.5 w-3.5 text-(--state-contra)" aria-hidden />;
+  if (status === "skipped") return <Minus className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />;
+  return <span className="h-1.5 w-1.5 rounded-full bg-(--aurelix-line-strong)" aria-hidden />;
+}
+
+function statusWord(status: StageStatus) {
+  return status === "running" ? "Running"
+    : status === "complete" ? "Complete"
+    : status === "failed" ? "Failed"
+    : status === "skipped" ? "Skipped"
+    : "Queued";
+}
 
 export function LiveInvestigationViewer({
   stages, files, completedTime, claimResult, onOpenFullReport, onRestart,
-}: LiveInvestigationViewerProps) {
-  const [selectedLog, setSelectedLog] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll logs
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [stages]);
-
-  const Node = ({ id, label, icon: Icon, delay = 0, isParallel = false }: any) => {
-    const status = stages[id] || "pending";
-    const isActive = status === "running";
-    const isComplete = status === "complete";
-    const isSkipped = status === "skipped";
-    const isFailed = status === "failed";
-
-    return (
-      <motion.div
-        variants={nodeVariants}
-        initial="hidden"
-        animate={isActive ? "active" : "visible"}
-        transition={{ delay, duration: 0.3 }}
-        className={`relative flex items-center gap-3 p-3 rounded-lg border ${
-          isActive
-            ? "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] z-10"
-            : isFailed
-              ? "bg-destructive/10 border-destructive/50"
-              : isComplete
-                ? "bg-muted/10 border-border/50 opacity-70"
-                : isSkipped
-                  ? "bg-muted/5 border-dashed border-border/40 opacity-60"
-                  : "bg-background border-border/20 opacity-40"
-        } ${isParallel ? 'w-full' : 'w-64 mx-auto'}`}
-      >
-        <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${
-          isActive ? "bg-primary text-primary-foreground"
-            : isFailed ? "bg-destructive/20 text-destructive"
-            : isComplete ? "bg-emerald-500/20 text-emerald-500"
-            : "bg-muted text-muted-foreground"
-        }`}>
-          {isFailed ? <AlertTriangle className="h-4 w-4" />
-            : isComplete ? <Check className="h-4 w-4" />
-            : isActive ? <Activity className="h-4 w-4 animate-pulse" />
-            : <Icon className="h-4 w-4" />}
-        </div>
-        <div className="flex flex-col flex-1 truncate">
-          <span className={`text-sm font-medium truncate ${isActive ? "text-primary" : ""}`}>{label}</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
-            {isActive ? "Executing..."
-              : isFailed ? "Failed"
-              : isSkipped ? "Skipped — no usable image"
-              : isComplete ? "Completed"
-              : "Waiting"}
-          </span>
-        </div>
-        {isActive && (
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-          </span>
-        )}
-      </motion.div>
-    );
-  };
-
-  // Object URLs were minted on every render and never revoked, so each re-render during a
-  // live run leaked one blob for every attached photograph. Created once per file set and
-  // released when it changes or the view unmounts.
+}: Props) {
+  // Object URLs were minted on every render and never revoked, leaking a blob
+  // per photograph per re-render during a live run.
   const previews = useMemo(() => files.map(f => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach(URL.revokeObjectURL), [previews]);
-  const fileUrl = previews[0] ?? null;
+
+  const done = !!claimResult;
+  const activeIndex = STAGES.findIndex(s => stages[s.id] === "running");
+  const completedCount = STAGES.filter(s => ["complete", "skipped"].includes(stages[s.id])).length;
+  const progress = Math.round((completedCount / STAGES.length) * 100);
 
   return (
-    // Auto height on small screens so the page can scroll; the fixed three-pane viewport
-    // only applies from lg up. The negative margins cancel the parent's padding, which is
-    // p-4 on small screens and p-6 from lg — using -mx-6 unconditionally overhung the
-    // viewport by 8px each side on a phone and produced horizontal scroll.
-    <div className="flex flex-col lg:h-[calc(100vh-8rem)] bg-background -mx-4 -mt-4 lg:-mx-6 lg:-mt-6">
-
-      {/* Top Header */}
-      <div className="min-h-14 py-2 border-b border-border/50 flex flex-wrap items-center justify-between gap-2 px-4 lg:px-6 shrink-0 bg-card/30">
-        <div className="flex items-center gap-3">
-          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider">Live Investigation Trace</h2>
+    <div className="max-w-3xl mx-auto space-y-5">
+      {/* ── Run header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <StatusDot tone={done ? "verified" : "accent"} pulse={!done} />
+          <h2 className="text-[15px] font-semibold tracking-tight">
+            {done ? "Investigation complete" : "Investigation running"}
+          </h2>
         </div>
-        {completedTime && (
-          <div className="text-xs font-mono bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded border border-emerald-500/20">
-            Execution Time: {completedTime.toFixed(2)}s
-          </div>
-        )}
-      </div>
-
-      {/* Stacks on small screens; the three-pane layout needs ~620px of side panes alone,
-          which left nothing for the trace on a phone. */}
-      <div className="flex flex-col lg:flex-row flex-1 lg:overflow-hidden">
-        {/* Left Pane: Evidence Viewer */}
-        <div className="w-full lg:w-[300px] border-b lg:border-b-0 lg:border-r border-border/50 bg-card/10 flex flex-col shrink-0">
-          <div className="px-4 py-3 border-b border-border/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <ImageIcon className="h-3.5 w-3.5" /> Context
-          </div>
-          <div className="p-4 flex-1 overflow-y-auto space-y-4">
-            <div className="space-y-2">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Primary Evidence</span>
-              {fileUrl ? (
-                <div className="rounded-lg overflow-hidden border border-border/50 bg-black aspect-video relative group">
-                  <img src={fileUrl} alt="Evidence" className="object-contain w-full h-full opacity-80 group-hover:opacity-100 transition-opacity" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                    <span className="text-[10px] font-mono text-white/80">{files[0].name}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="aspect-video bg-muted/20 border border-border/30 rounded-lg flex items-center justify-center text-muted-foreground text-xs">
-                  No image provided
-                </div>
-              )}
-            </div>
-            
-            {files.length > 1 && (
-              <div className="grid grid-cols-2 gap-2">
-                {files.slice(1).map((f, i) => (
-                  <div key={i} className="aspect-square bg-muted/20 rounded border border-border/30 overflow-hidden relative">
-                    <img src={previews[i + 1]} alt={`Evidence ${i + 2}`} className="object-cover w-full h-full opacity-70" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Center Pane: Orchestration Graph */}
-        <div className="flex-1 flex flex-col relative bg-[#0a0a0c] overflow-y-auto custom-scrollbar p-4 sm:p-8 min-h-[420px]">
-          <div className="max-w-xl mx-auto w-full flex flex-col items-center space-y-6 pb-20">
-            <Node id="preflight" label="Preflight — Quality Gate" icon={ImageIcon} delay={0.1} />
-
-            <div className="h-8 w-px bg-border/50" />
-            <Node id="duplicate_check" label="Duplicate Image Check" icon={Search} delay={0.15} />
-
-            <div className="h-8 w-px bg-border/50" />
-
-            <div className="w-full relative border border-primary/40 rounded-xl p-6 bg-primary/5">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0a0a0c] px-3 text-[10px] font-mono text-primary border border-primary/40 rounded-full">
-                1 MULTIMODAL REQUEST
-              </div>
-              <Node id="perception" label="Perception" icon={Search} isParallel delay={0.2} />
-            </div>
-
-            <div className="h-8 w-px bg-border/50" />
-
-            <div className="w-full relative border border-border/30 rounded-xl p-6 bg-card/5">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0a0a0c] px-3 text-[10px] font-mono text-muted-foreground border border-border/30 rounded-full">
-                DETERMINISTIC — NO MODEL
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Node id="policy_verification" label="Policy Check" icon={ShieldCheck} isParallel delay={0.3} />
-                <Node id="user_risk" label="User Risk" icon={UserX} isParallel delay={0.4} />
-                <Node id="alignment" label="Claim vs Evidence" icon={FileText} isParallel delay={0.5} />
-              </div>
-            </div>
-
-            <div className="h-8 w-px bg-border/50" />
-            <Node id="decision" label="Fraud, Confidence & Verdict" icon={CheckCircle2} delay={0.6} />
-          </div>
-        </div>
-
-        {/* Right Pane: Summary */}
-        <div className="w-full lg:w-[320px] border-t lg:border-t-0 lg:border-l border-border/50 bg-card/10 flex flex-col shrink-0">
-          <div className="px-4 py-3 border-b border-border/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <Activity className="h-3.5 w-3.5" /> Output Summary
-          </div>
-          <div className="p-5 overflow-y-auto space-y-6">
-            {!claimResult ? (
-              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50">
-                <Activity className="h-8 w-8 mb-2 animate-pulse" />
-                <span className="text-xs">Awaiting final decision...</span>
-              </div>
-            ) : (
-              <AnimatePresence>
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                  {/* Status */}
-                  <div className={`p-4 rounded-lg border ${
-                    claimResult.claim_status === 'supported' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' :
-                    claimResult.claim_status === 'contradicted' ? 'bg-destructive/10 border-destructive/20 text-destructive' :
-                    'bg-amber-500/10 border-amber-500/20 text-amber-500'
-                  }`}>
-                    <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 opacity-80">Verdict</div>
-                    <div className="text-xl font-bold capitalize tracking-tight">{claimResult.claim_status.replace(/_/g, ' ')}</div>
-                    <p className="text-xs mt-2 opacity-90 leading-relaxed">{claimResult.claim_status_justification}</p>
-                  </div>
-
-                  {/* Confidence */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Confidence</span>
-                      <span className="font-mono">{claimResult.confidence_score}%</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${claimResult.confidence_score >= 90 ? 'bg-emerald-500' : claimResult.confidence_score >= 70 ? 'bg-amber-500' : 'bg-destructive'}`}
-                        style={{ width: `${claimResult.confidence_score}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="bg-card border border-border/50 rounded p-3">
-                      <div className="text-[10px] text-muted-foreground uppercase mb-1">Fraud Score</div>
-                      <div className={`font-mono ${claimResult.fraud_score > 70 ? 'text-destructive' : 'text-emerald-500'}`}>
-                        {claimResult.fraud_score}/100
-                      </div>
-                    </div>
-                    <div className="bg-card border border-border/50 rounded p-3">
-                      <div className="text-[10px] text-muted-foreground uppercase mb-1">User Risk</div>
-                      <div className={`font-mono capitalize ${claimResult.risk_level === 'HIGH' ? 'text-destructive' : claimResult.risk_level === 'MEDIUM' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                        {claimResult.risk_level}
-                      </div>
-                    </div>
-                  </div>
-
-                  {claimResult.manual_review_required && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-amber-500">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        <span className="text-xs font-bold uppercase tracking-wider">Escalated</span>
-                      </div>
-                      <div className="text-xs opacity-90 leading-relaxed">
-                        {claimResult.escalation_reason}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Where the run ended before: a verdict on screen and no way to reach
-                      the audit trail behind it. The full report is the per-agent reasoning
-                      the decision was actually assembled from. */}
-                  <div className="space-y-2 pt-2 border-t border-border/40">
-                    <button
-                      onClick={onOpenFullReport}
-                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-semibold transition-colors"
-                    >
-                      Open full investigation <ArrowRight className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={onRestart}
-                      className="w-full flex items-center justify-center gap-2 border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/20 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> New investigation
-                    </button>
-                    <div className="text-[10px] text-muted-foreground text-center font-mono pt-1">
-                      claim #{claimResult.id}
-                    </div>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Pane: Logs / Raw Output */}
-      <div className="h-48 border-t border-border/50 bg-[#09090b] shrink-0 flex flex-col">
-        <div className="h-8 border-b border-border/30 flex items-center px-4 bg-card/30 shrink-0">
-          <Code className="h-3 w-3 text-muted-foreground mr-2" />
-          <span className="text-[10px] uppercase font-mono text-muted-foreground">Execution Logs</span>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] text-muted-foreground space-y-1.5 custom-scrollbar" ref={scrollRef}>
-          {Object.entries(stages).map(([stage, status]) => (
-            status !== "pending" && (
-              <div key={stage} className="flex gap-4">
-                <span className="text-primary/70 shrink-0 w-24">[{new Date().toISOString().split('T')[1].slice(0, -1)}]</span>
-                <span className="text-emerald-500/70 shrink-0 w-20">[{status.toUpperCase()}]</span>
-                <span className="text-foreground/80">Agent <span className="text-primary">{stage}</span> executed</span>
-              </div>
-            )
-          ))}
-          {claimResult && (
-            <div className="mt-4 pt-4 border-t border-border/30">
-              <span className="text-primary/70">[{new Date().toISOString().split('T')[1].slice(0, -1)}]</span>
-              <span className="text-emerald-500/70 ml-4">[DONE]</span>
-              <span className="text-foreground/80 ml-4">Final JSON emitted:</span>
-              <pre className="mt-2 ml-[152px] text-muted-foreground overflow-x-auto p-2 bg-black/50 rounded border border-border/30">
-                {JSON.stringify(claimResult, null, 2)}
-              </pre>
-            </div>
+        <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+          <span className="tnum">{completedCount}/{STAGES.length} stages</span>
+          {completedTime !== undefined && (
+            <span className="tnum text-(--state-verified)">{completedTime.toFixed(2)}s</span>
           )}
         </div>
       </div>
+
+      {/* A hairline progress bar. No glow, no shimmer. */}
+      <div className="h-0.5 w-full rounded-full bg-surface-2 overflow-hidden" role="progressbar"
+           aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Investigation progress">
+        <div
+          className="h-full bg-(--aurelix-accent) transition-[width] duration-500 ease-(--ease-out)"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* ── Evidence strip ─────────────────────────────────────────────── */}
+      {previews.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {previews.map((src, i) => (
+            <div
+              key={i}
+              className="relative h-16 w-24 shrink-0 rounded-md overflow-hidden border border-line bg-surface-2"
+            >
+              <img src={src} alt={`Evidence ${i + 1}`} className="h-full w-full object-cover" />
+              <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white/85 font-mono text-[10px]
+                               px-1.5 py-0.5">
+                img_{i + 1}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Execution trace ────────────────────────────────────────────── */}
+      <ol className="rounded-lg border border-line bg-surface-1 divide-y divide-line overflow-hidden">
+        {STAGES.map((stage, i) => {
+          const status = stages[stage.id] ?? "pending";
+          const isActive = status === "running";
+          const isPending = status === "pending";
+          return (
+            <li
+              key={stage.id}
+              className={`flex items-center gap-3 px-4 py-3 transition-colors duration-(--dur-base)
+                          ${isActive ? "bg-(--aurelix-accent-weak)" : ""} ${isPending ? "opacity-45" : ""}`}
+            >
+              <span className="tnum text-[11px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
+              <span className="h-4 w-4 flex items-center justify-center shrink-0"><StageIcon status={status} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[13px] font-medium ${isActive ? "text-(--aurelix-accent)" : ""}`}>
+                    {stage.label}
+                  </span>
+                  {stage.network && (
+                    <span className="font-mono text-[10px] text-muted-foreground border border-line rounded px-1
+                                     py-px hidden sm:inline">
+                      1 model request
+                    </span>
+                  )}
+                </div>
+                <p className="text-[12px] text-muted-foreground truncate mt-0.5">
+                  {status === "skipped" ? "Skipped — no usable photograph to analyse" : stage.detail}
+                </p>
+              </div>
+              <span className="label-meta shrink-0 hidden sm:block">{statusWord(status)}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* ── Outcome ────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {claimResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="space-y-4"
+          >
+            <div className={`rounded-lg border p-5 ${
+              decisionTone(claimResult.claim_status) === "verified" ? "border-(--state-verified)/25 bg-(--state-verified-weak)"
+              : decisionTone(claimResult.claim_status) === "contra" ? "border-(--state-contra)/25 bg-(--state-contra-weak)"
+              : "border-line bg-surface-1"
+            }`}>
+              <div className="label-meta mb-2">Decision</div>
+              <div className={`text-lg font-semibold tracking-tight ${
+                decisionTone(claimResult.claim_status) === "verified" ? "text-(--state-verified)"
+                : decisionTone(claimResult.claim_status) === "contra" ? "text-(--state-contra)"
+                : "text-foreground"
+              }`}>
+                {decisionLabel(claimResult.claim_status)}
+              </div>
+              <p className="text-[13px] leading-relaxed text-text-2 mt-2">
+                {claimResult.claim_status_justification}
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-line/60">
+                <div>
+                  <div className="label-meta mb-1.5">Confidence</div>
+                  <ConfidenceMeter value={claimResult.confidence_score} />
+                </div>
+                <div>
+                  <div className="label-meta mb-1.5">Fraud score</div>
+                  <div className="tnum text-[13px]">{claimResult.fraud_score}/100</div>
+                </div>
+                <div>
+                  <div className="label-meta mb-1.5">Claimant risk</div>
+                  <div className="flex items-center gap-1.5">
+                    <StatusDot tone={riskTone(claimResult.risk_level)} />
+                    <span className="text-[13px]">{claimResult.risk_level}</span>
+                  </div>
+                </div>
+              </div>
+
+              {claimResult.manual_review_required && (
+                <div className="mt-4 pt-4 border-t border-line/60 flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-(--state-warning) shrink-0 mt-0.5" aria-hidden />
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-medium text-(--state-warning)">Escalated for human review</div>
+                    <p className="text-[12px] text-text-2 leading-relaxed mt-0.5">
+                      {claimResult.escalation_reason}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={onOpenFullReport}
+                className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md bg-(--aurelix-accent)
+                           hover:bg-(--aurelix-accent-hover) text-(--primary-foreground) text-[13px] font-medium
+                           transition-colors duration-(--dur-fast)"
+              >
+                Open case file <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              </button>
+              <button
+                onClick={onRestart}
+                className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md border border-line
+                           hover:bg-surface-2 text-[13px] font-medium transition-colors duration-(--dur-fast)"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> New investigation
+              </button>
+              <span className="tnum text-[12px] text-muted-foreground self-center sm:ml-auto">
+                INV-{String(claimResult.id).padStart(4, "0")}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
