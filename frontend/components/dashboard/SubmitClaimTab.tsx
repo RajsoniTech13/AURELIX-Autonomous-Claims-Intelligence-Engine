@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UploadCloud, ChevronRight, ChevronLeft, Image as ImageIcon, CheckCircle2, Zap, AlertTriangle } from "lucide-react";
+import { UploadCloud, ChevronRight, ChevronLeft, Image as ImageIcon, FileText, CheckCircle2, Zap, AlertTriangle } from "lucide-react";
 import { submitClaimStream } from "@/lib/api";
 import { LiveInvestigationViewer } from "./LiveInvestigationViewer";
 
@@ -22,6 +22,7 @@ const INITIAL_STAGES: PipelineStages = {
   policy_verification: "pending",
   user_risk: "pending",
   alignment: "pending",
+  document_check: "pending",
   decision: "pending"
 };
 
@@ -43,6 +44,7 @@ export function SubmitClaimTab({
   const [claimObject, setClaimObject] = useState("car");
   const [userClaim, setUserClaim] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [docs, setDocs] = useState<File[]>([]);
 
   /**
    * Per-step validity.
@@ -71,6 +73,7 @@ export function SubmitClaimTab({
     setError(null);
     setUserClaim("");
     setFiles([]);
+    setDocs([]);
   };
 
   const handleSubmit = async () => {
@@ -94,6 +97,7 @@ export function SubmitClaimTab({
     formData.append("claim_object", claimObject);
     formData.append("user_claim", userClaim);
     files.forEach(f => formData.append("files", f));
+    docs.forEach(f => formData.append("documents", f));
 
     try {
       await submitClaimStream(formData, (event) => {
@@ -265,26 +269,88 @@ export function SubmitClaimTab({
             {step === 3 && (
               <>
                 <div>
-                  <h3 className="text-lg font-medium text-foreground">Visual Evidence</h3>
-                  <p className="text-xs text-muted-foreground">AURELIX Vision Agents require clear, well-lit photography.</p>
+                  <h3 className="text-lg font-medium text-foreground">Evidence</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Photographs are required. Supporting paperwork is optional but is
+                    cross-checked against them.
+                  </p>
                 </div>
-                <div className="space-y-4">
-                  <div className="border border-dashed border-border rounded-xl p-12 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors relative group">
-                    <UploadCloud className="h-8 w-8 text-muted-foreground mb-4 group-hover:text-primary transition-colors" />
-                    <Input type="file" multiple accept="image/*" onChange={e => setFiles(Array.from(e.target.files || []))} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <p className="text-sm font-medium">Click or drag images here</p>
-                    <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP</p>
-                  </div>
-                  {files.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {files.map((f, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs bg-card border border-border/50 rounded p-2">
-                          <ImageIcon className="h-3 w-3 text-primary shrink-0" />
-                          <span className="truncate max-w-[150px]">{f.name}</span>
-                        </div>
-                      ))}
+
+                <div className="space-y-5">
+                  {/* ── Photographs ─────────────────────────────────────── */}
+                  <div className="space-y-3">
+                    <div className="flex items-baseline justify-between">
+                      <label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                        Photographs
+                      </label>
+                      <span className="text-[11px] text-muted-foreground">Required · up to 6</span>
                     </div>
-                  )}
+                    <div className="border border-dashed border-border rounded-xl p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors relative group focus-within:border-primary">
+                      <UploadCloud className="h-7 w-7 text-muted-foreground mb-3 group-hover:text-primary transition-colors" aria-hidden />
+                      <Input
+                        type="file" multiple accept="image/*"
+                        aria-label="Claim photographs"
+                        onChange={e => setFiles(Array.from(e.target.files || []))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <p className="text-sm font-medium">Click or drag photographs here</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP</p>
+                    </div>
+                    {files.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {files.map((f, i) => (
+                          <span key={i} className="flex items-center gap-2 text-xs bg-card border border-border/50 rounded p-2">
+                            <ImageIcon className="h-3 w-3 text-primary shrink-0" aria-hidden />
+                            <span className="truncate max-w-[150px]">{f.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/*
+                    Supporting documents.
+
+                    This is what turns "there is damage" into "this is the repair
+                    being paid for". The invoice, estimate or report is read in the
+                    SAME model request as the photographs — it costs tokens, not an
+                    extra call — and is then cross-checked deterministically against
+                    what the camera actually recorded.
+                  */}
+                  <div className="space-y-3 pt-1 border-t border-border/40">
+                    <div className="flex items-baseline justify-between pt-4">
+                      <label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                        Supporting documents
+                      </label>
+                      <span className="text-[11px] text-muted-foreground">Optional · up to 3</span>
+                    </div>
+                    <div className="border border-dashed border-border rounded-xl p-6 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors relative group focus-within:border-primary">
+                      <FileText className="h-6 w-6 text-muted-foreground mb-2.5 group-hover:text-primary transition-colors" aria-hidden />
+                      <Input
+                        type="file" multiple accept="application/pdf,image/*"
+                        aria-label="Supporting documents"
+                        onChange={e => setDocs(Array.from(e.target.files || []))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <p className="text-sm font-medium">Invoice, repair estimate, receipt or report</p>
+                      <p className="text-xs text-muted-foreground mt-1">PDF, JPEG, PNG, WebP</p>
+                    </div>
+                    {docs.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {docs.map((f, i) => (
+                          <span key={i} className="flex items-center gap-2 text-xs bg-card border border-border/50 rounded p-2">
+                            <FileText className="h-3 w-3 text-primary shrink-0" aria-hidden />
+                            <span className="truncate max-w-[150px]">{f.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Paperwork is read in the same model request as the photographs, then
+                      compared against them — the object it names, the parts it itemises and
+                      the amount it quotes.
+                    </p>
+                  </div>
                 </div>
               </>
             )}
@@ -314,7 +380,8 @@ export function SubmitClaimTab({
                   <div className="pt-3 border-t border-border/30">
                     <div className="text-[10px] uppercase text-muted-foreground tracking-wider mb-1">Attachments</div>
                     <div className="text-sm font-medium text-primary flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4" /> {files.length} valid images queued
+                      <ImageIcon className="h-4 w-4" aria-hidden /> {files.length} photograph{files.length === 1 ? "" : "s"}
+                      {docs.length > 0 && <> · {docs.length} document{docs.length === 1 ? "" : "s"}</>}
                     </div>
                   </div>
                 </div>

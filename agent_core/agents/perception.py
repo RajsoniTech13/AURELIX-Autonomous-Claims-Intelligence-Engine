@@ -19,6 +19,7 @@ from PIL import Image
 from agent_core.prompts.batch_perception import (
     BATCH_SYSTEM_PROMPT,
     CLAIM_BLOCK_FOOTER,
+    DOCUMENT_LABEL,
     IMAGE_LABEL,
     build_batch_instruction,
     build_claim_block_header,
@@ -45,24 +46,42 @@ class BatchIsolationError(RuntimeError):
 
 
 class PreparedClaim:
-    """One claim staged for a batch: its text plus its own decoded images."""
+    """
+    One claim staged for a batch: its text, its own decoded images, and any
+    supporting documents.
 
-    __slots__ = ("claim_id", "claim_object", "claim_text", "images", "raw")
+    Documents ride in the **same** request as the photographs. That is the whole
+    reason the capability fits a 20-request daily budget: reading an invoice
+    costs tokens, and tokens have never been the binding constraint here — a
+    12-claim batch is under 3% of context. Requests are the scarce resource, and
+    this adds none.
+    """
+
+    __slots__ = ("claim_id", "claim_object", "claim_text", "images", "documents", "raw")
 
     def __init__(self, claim_id: str, claim_object: str, claim_text: str,
-                 images: Sequence[Image.Image], raw: Dict[str, Any] | None = None):
+                 images: Sequence[Image.Image], raw: Dict[str, Any] | None = None,
+                 documents: Sequence[Any] = ()):
         self.claim_id = claim_id
         self.claim_object = claim_object
         self.claim_text = claim_text
         self.images = list(images)
+        self.documents = list(documents)
         self.raw = raw or {}
 
     @property
     def image_count(self) -> int:
         return len(self.images)
 
+    @property
+    def document_count(self) -> int:
+        return len(self.documents)
+
     def image_ids(self) -> List[str]:
         return [image_id(i) for i in range(len(self.images))]
+
+    def document_ids(self) -> List[str]:
+        return [f"doc_{i + 1}" for i in range(len(self.documents))]
 
 
 def build_batch_contents(claims: Sequence[PreparedClaim]) -> List[Any]:
@@ -81,6 +100,11 @@ def build_batch_contents(claims: Sequence[PreparedClaim]) -> List[Any]:
         for idx, img in enumerate(claim.images):
             contents.append(IMAGE_LABEL.format(claim_id=claim.claim_id, image_id=image_id(idx)))
             contents.append(img)
+        for idx, doc in enumerate(claim.documents):
+            contents.append(DOCUMENT_LABEL.format(
+                claim_id=claim.claim_id, document_id=f"doc_{idx + 1}",
+            ))
+            contents.append(doc)
         contents.append(CLAIM_BLOCK_FOOTER.format(claim_id=claim.claim_id) + "\n")
 
     contents.append(build_batch_instruction([c.claim_id for c in claims]))
@@ -139,6 +163,24 @@ def validate_isolation(
                 f"{cid} cited image ids {sorted(stray)} but only owns {sorted(valid_ids) or '[]'}"
             )
 
+        # Documents get the same treatment. A finding attributed to doc_2 when the claim
+        # supplied one document is the same contamination signature as a stray image, and
+        # it is more dangerous: an invoice from another claimant carries a real amount and
+        # a real name.
+        valid_docs = set(by_id[cid].document_ids())
+        cited_docs = {d.document_id for d in (result.documents or []) if d.document_id}
+        stray_docs = {d for d in cited_docs if d not in valid_docs}
+        if stray_docs:
+            problems.append(
+                f"{cid} reported document ids {sorted(stray_docs)} but only owns "
+                f"{sorted(valid_docs) or '[]'}"
+            )
+        if len(result.documents or []) > len(valid_docs):
+            problems.append(
+                f"{cid} returned {len(result.documents)} document findings for "
+                f"{len(valid_docs)} supplied document(s)"
+            )
+
     if problems:
         raise BatchIsolationError("; ".join(problems))
 
@@ -173,8 +215,8 @@ def run_batch_perception(
         cache_key = compute_cache_key(agent_name="batch_perception", claim_text=fingerprint)
 
     logger.info(
-        "[Perception] batch of %d claims, %d images total",
-        len(claims), sum(c.image_count for c in claims),
+        "[Perception] batch of %d claims, %d images, %d documents — one request",
+        len(claims), sum(c.image_count for c in claims), sum(c.document_count for c in claims),
     )
 
     response = call_gemini_multimodal(

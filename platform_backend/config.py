@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", 8 * 1024 * 1024))
     MAX_UPLOAD_FILES: int = int(os.getenv("MAX_UPLOAD_FILES", 6))
 
+    # Supporting documents. Capped separately and lower than photographs: they
+    # ride in the same model request, and a 20 MB scanned PDF is a denial of
+    # service on a free-tier container long before it is useful evidence.
+    MAX_DOCUMENT_FILES: int = int(os.getenv("MAX_DOCUMENT_FILES", 3))
+    MAX_DOCUMENT_BYTES: int = int(os.getenv("MAX_DOCUMENT_BYTES", 10 * 1024 * 1024))
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

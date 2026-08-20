@@ -230,12 +230,23 @@ export default function Dashboard() {
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1400px] px-4 sm:px-6 py-5 sm:py-7">
-            <AnimatePresence mode="wait">
+            {/*
+              No `AnimatePresence mode="wait"` here, and no exit animation.
+
+              `mode="wait"` holds the incoming view until the outgoing one
+              reports its exit complete. When a tab change originates *inside*
+              the outgoing view — the review queue's "Full case file" button
+              sets the claim and the tab in the same tick — that exit can never
+              settle, and the workspace renders empty while the header shows the
+              new page. A blank screen is a far worse trade than losing a 160ms
+              cross-fade. Entry is still animated; nothing has to finish before
+              the next thing starts.
+            */}
+            <div>
               <motion.div
                 key={activeTab}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
                 {activeTab === "overview" && (
@@ -261,7 +272,7 @@ export default function Dashboard() {
                 {activeTab === "queue" && <ReviewQueueTab onSelectClaim={openClaim} onNavigate={go} />}
                 {activeTab === "analytics" && <AnalyticsTab />}
               </motion.div>
-            </AnimatePresence>
+            </div>
           </div>
         </main>
       </div>

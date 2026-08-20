@@ -28,7 +28,7 @@ from platform_backend.db.models import Claim, Job
 from platform_backend.db.session import get_db
 from platform_backend.services import jobs as job_service
 from platform_backend.services.claim_service import utc_iso
-from platform_backend.services.uploads import read_uploads
+from platform_backend.services.uploads import read_documents, read_uploads
 
 router = APIRouter(prefix="/api/v1")
 
@@ -64,6 +64,7 @@ async def submit_claim(
     user_claim: str = Form(...),
     claim_object: str = Form(...),
     files: List[UploadFile] = File([]),
+    documents: List[UploadFile] = File([]),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
@@ -85,15 +86,20 @@ async def submit_claim(
             )
 
     images, image_paths = await read_uploads(files)
+    # Accepted here for the same reason images are: a malformed upload should fail
+    # fast with a 400 the submitter can act on, not become a job that fails
+    # asynchronously. Without this the route accepted `documents` and silently
+    # discarded them — an API that drops evidence is worse than one that refuses it.
+    doc_parts, document_paths = await read_documents(documents)
 
     payload = {
         "user_id": user_id, "user_claim": user_claim, "claim_object": claim_object,
-        "image_paths": image_paths,
+        "image_paths": image_paths, "document_paths": document_paths,
     }
     job = job_service.create_job(
         db, user_id=user_id, payload=payload, idempotency_key=idempotency_key,
     )
-    job_service.submit(job.id, images)
+    job_service.submit(job.id, images, doc_parts)
 
     response.headers["Location"] = f"/api/v1/jobs/{job.id}"
     return _job_view(job)

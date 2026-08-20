@@ -82,6 +82,18 @@ rules:
     risk_flags: [claim_mismatch, damage_not_visible]
     reason: "The claimed part is clearly visible and shows no damage."
 
+  - id: R043_document_wrong_object
+    when: {document_object_mismatch: true}
+    verdict: contradicted
+    risk_flags: [claim_mismatch]
+    reason: "A supporting document is for a different object from the one claimed."
+
+  - id: R044_document_part_contradiction
+    when: {document_part_contradiction: true, part_match_in: [mismatch, not_visible]}
+    verdict: contradicted
+    risk_flags: [claim_mismatch]
+    reason: "The itemised repair does not correspond to the damage visible in the photographs."
+
   - id: R042_severity_inflation
     when: {part_match_in: [exact, adjacent], severity_delta_gte: 2}
     verdict: contradicted
@@ -114,6 +126,23 @@ rules:
     risk_flags: [damage_not_visible]
     reason: "The available evidence does not allow a determination either way."
 
+# ── Documents ──────────────────────────────────────────────────────────────
+#
+# A ceiling per observed severity, not a price model. It answers one question —
+# "is this quote an order of magnitude away from what this damage could cost" —
+# and deliberately nothing finer. Currency is not normalised: these are set high
+# enough that the comparison survives the major currencies this would see, and a
+# real deployment should localise them against its own claims history rather
+# than inherit a guess.
+#
+# Only `invoice` and `repair_estimate` are measured against these. A police
+# report with a reference number on it is not a quote.
+documents:
+  amount_ceiling_by_severity:
+    none: 250
+    low: 2500
+    medium: 12000
+
 # ── Escalation ─────────────────────────────────────────────────────────────
 escalation:
   confidence_below: 70
@@ -139,6 +168,13 @@ fraud:
     user_history_risk: 15
     instruction_like_text: 10
     poor_image_quality: 5
+    # ── Documentary signals ──────────────────────────────────────────────
+    # Weighted below the visual ones on purpose. A photograph is the primary
+    # record of what happened; paperwork corroborates it. A mis-scanned invoice
+    # should raise a reviewer's eyebrow, not decide the claim on its own.
+    document_object_mismatch: 25
+    document_part_contradiction: 20
+    document_amount_implausible: 15
   review_threshold: 50
   contradiction_threshold: 70
 

@@ -103,7 +103,7 @@ def _analysis_to_db_claim(
     )
 
 
-def _audit_logs_for(analysis: ClaimAnalysis) -> List[Dict[str, Any]]:
+def _audit_logs_for(analysis: ClaimAnalysis, document_paths: str = "none") -> List[Dict[str, Any]]:
     """
     Build the per-stage audit trail.
 
@@ -178,6 +178,27 @@ def _audit_logs_for(analysis: ClaimAnalysis) -> List[Dict[str, Any]]:
                          f"part_match={analysis.alignment.part_match}, "
                          f"severity_delta={analysis.alignment.severity_delta}",
         })
+
+    # Documents, between alignment and decision — the same position they occupy in
+    # the pipeline, so the trail reads in execution order.
+    # Stored paths live in this log's `inputs` rather than on a new `Claim`
+    # column. The schema is still created by `create_all`, which does not add
+    # columns to an existing table — a new column would simply never appear on
+    # the deployed database, and the failure would be silent. `inputs` is an
+    # existing JSON column, so this is additive and needs no migration.
+    docs = analysis.documents
+    doc_paths = [p for p in (document_paths or "none").split(";") if p and p != "none"]
+    logs.append({
+        "agent_name": "document_check",
+        "inputs": {"documents_supplied": docs.count if docs else 0, "document_paths": doc_paths},
+        "outputs": docs.to_dict() if docs else None,
+        "reasoning": (
+            docs.describe() if docs and docs.notes
+            else f"{docs.count} document(s) supplied; nothing contradicted the photographs."
+            if docs and docs.count
+            else "No supporting documents were submitted with this claim."
+        ),
+    })
 
     logs.append({
         "agent_name": "decision",
@@ -297,6 +318,8 @@ def execute_claim_sync(
     e_rules: Optional[dict],
     pil_images: Optional[list] = None,
     image_base_dir: Optional[str] = None,
+    documents: Optional[list] = None,
+    document_paths: str = "none",
 ) -> Claim:
     """Analyse one claim and persist it. Signature unchanged from the pre-migration version."""
     analysis: Optional[ClaimAnalysis] = None
@@ -310,7 +333,7 @@ def execute_claim_sync(
 
     assert analysis is not None
     db_claim = _analysis_to_db_claim(analysis, user_id, image_paths, user_claim, claim_object)
-    return _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis))
+    return _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis, document_paths))
 
 
 def generate_claim_stream(
@@ -323,6 +346,8 @@ def generate_claim_stream(
     e_rules: Optional[dict],
     pil_images: Optional[list] = None,
     image_base_dir: Optional[str] = None,
+    documents: Optional[list] = None,
+    document_paths: str = "none",
 ) -> Iterator[str]:
     """
     Server-sent events: one `{stage, status}` per pipeline stage, then `{stage: "done"}`.
@@ -335,6 +360,7 @@ def generate_claim_stream(
         for event in _events_with_heartbeat(
             user_id=user_id, user_claim=user_claim, claim_object=claim_object,
             image_paths=image_paths, images=pil_images or None,
+            documents=documents or None,
             image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
         ):
             if event is _HEARTBEAT:
@@ -351,7 +377,7 @@ def generate_claim_stream(
         db_claim = _analysis_to_db_claim(
             analysis, user_id, image_paths, user_claim, claim_object,
         )
-        db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis))
+        db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis, document_paths))
         yield f'data: {json.dumps({"stage": "done", "claim": _claim_to_dict(db_claim)})}\n\n'
 
     except Exception as e:  # noqa: BLE001 - the stream must report, not crash the response

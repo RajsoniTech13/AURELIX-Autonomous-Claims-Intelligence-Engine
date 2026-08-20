@@ -66,7 +66,8 @@
     "Circular dent graphic visible on the front bumper region in img_1 and img_2."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -166,7 +167,8 @@
     "White horizontal scratch lines visible on the rear bumper."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -256,7 +258,8 @@
     "Large circular dent with radial line shading visible on the car door."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -356,7 +359,8 @@
     "Horizontal scratches are visible on the front bonnet/fender area of the car in img_1."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -445,7 +449,8 @@
     "Cracked/shattered pattern visible on the headlight housing in img_1."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -544,7 +549,8 @@
     "Impact crack visible on the car window/windscreen in img_2."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -650,7 +656,8 @@
    "uncertainties": [
     "The wing mirror is not visible in the provided image, so damage to it cannot be verified."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -742,7 +749,8 @@
     "Spiderweb-like radial cracking is clearly visible on the laptop screen."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -832,7 +840,8 @@
     "A circular mark/stain is visible on the keyboard area."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -932,7 +941,8 @@
     "Illustration shows two broken spots along the laptop hinge area in both images."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1032,7 +1042,8 @@
     "Illustration shows a small dent/mark at the lower-left corner of the base."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1123,7 +1134,8 @@
     "Cardboard package shows crushed packaging on the bottom-left corner."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1216,7 +1228,8 @@
     "Both images show a clear tear along the center seal of the packaging."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1316,7 +1329,8 @@
     "There is a triangular torn opening on the lower right side panel of the cardboard box."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1405,7 +1419,8 @@
     "Light horizontal scratch marks are visible across the front grille area of the green vehicle."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1499,7 +1514,8 @@
    "uncertainties": [
     "Synthetic graphic depiction rather than a photograph."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1594,7 +1610,8 @@
    "uncertainties": [
     "Outer lid panel cannot be evaluated because only the front/open display is shown."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1693,7 +1710,8 @@
    "uncertainties": [
     "Synthetic graphic illustration rather than actual photo."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1790,7 +1808,8 @@
     "Cracked front light assembly observed on front grill area"
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1887,7 +1906,8 @@
     "Crack damage visible on front light panel"
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -1986,7 +2006,8 @@
    "uncertainties": [
     "Condition of front bumper cannot be determined from rear photo"
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2083,7 +2104,8 @@
     "Physical damage and broken key area observed on the keyboard."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2180,7 +2202,8 @@
     "Radial crack pattern visible across the screen."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2277,7 +2300,8 @@
     "Dark staining / water damage visible on the bottom-left corner of the package."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2370,7 +2394,8 @@
     "White scratch lines are visible across the front bumper/grille area."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2463,7 +2488,8 @@
     "White scratch lines are visible across the lower rear bumper section."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2556,7 +2582,8 @@
     "Horizontal crack/scratch lines are visible on the laptop display screen."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2644,7 +2671,8 @@
    "uncertainties": [
     "Lower portion of the box is obscured by a foreground element."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2733,7 +2761,8 @@
     "Horizontal scratch marks are visible on the side door panel."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2822,7 +2851,8 @@
     "Multiple horizontal scratch marks are visible on the front bonnet section."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -2911,7 +2941,8 @@
    "uncertainties": [
     "Unable to assess bumper condition due to extreme blur."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "unusable",
@@ -3016,7 +3047,8 @@
    "uncertainties": [
     "Low lighting makes inspecting door panel details difficult."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "unusable",
@@ -3116,7 +3148,8 @@
     "A spiderweb-pattern crack is clearly visible on the screen display of the laptop in image img_1."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "unusable",
@@ -3210,7 +3243,8 @@
    "uncertainties": [
     "The seal and box surface are mostly obstructed by a dark overlay."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3300,7 +3334,8 @@
    "uncertainties": [
     "The rear bumper is cropped out of view."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3390,7 +3425,8 @@
    "uncertainties": [
     "The boot/trunk area is not visible in the frame."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3480,7 +3516,8 @@
    "uncertainties": [
     "Cannot inspect port condition because it is not captured in the image."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3571,7 +3608,8 @@
    "uncertainties": [
     "No car or vehicle parts are shown in the image."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3662,7 +3700,8 @@
    "uncertainties": [
     "No laptop or screen is shown in the image."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3753,7 +3792,8 @@
    "uncertainties": [
     "Vehicle and door are not visible in the provided image."
    ],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3839,7 +3879,8 @@
     "The front bumper area of the stylized car illustration is visible and undamaged."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -3925,7 +3966,8 @@
     "The laptop screen is fully visible and shows no cracks or physical damage."
    ],
    "uncertainties": [],
-   "instruction_like_text_present": false
+   "instruction_like_text_present": false,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -4020,7 +4062,8 @@
    "uncertainties": [
     "Evidence is an illustration rather than a photograph."
    ],
-   "instruction_like_text_present": true
+   "instruction_like_text_present": true,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",
@@ -4120,7 +4163,8 @@
    "uncertainties": [
     "Evidence is an illustration rather than a photograph."
    ],
-   "instruction_like_text_present": true
+   "instruction_like_text_present": true,
+   "documents": []
   },
   "preflight_quality": {
    "overall": "good",

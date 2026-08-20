@@ -7,6 +7,7 @@ Returns PASS / WARNING / FAIL with reason.
 import csv
 import os
 from typing import Dict, Any, List, Optional
+from agent_core.agents.alignment import is_canonical_part, normalise_part
 from agent_core.schemas.models import PolicyVerificationOutput
 
 
@@ -93,17 +94,42 @@ def run_policy_verification_agent(
             )
 
     # ── Visibility check ──
+    #
+    # Both sides go through the object-scoped ontology before being compared.
+    #
+    # They used to be compared as raw substrings, and the two sides never speak the
+    # same dialect: the model reports what a person writes ("front bumper", "bonnet",
+    # "windscreen") while the policy CSV is written in canonical form
+    # ("front_bumper", "hood", "windshield"). Neither `"front_bumper" in "front bumper"`
+    # nor the reverse is true, so **every naturally-worded part produced a WARNING** —
+    # 20 of 34 claims in the live database, on claims that were otherwise perfectly
+    # compliant.
+    #
+    # The second correction is about what this check is *for*. Policy visibility asks
+    # "is the part the claimant named one this policy covers?" — a question about
+    # coverage, which only has an answer once a part has been named. When the claimant
+    # named nothing at all there is no visibility requirement to fail, and warning about
+    # it duplicated R021, which already routes unspecified claims to review.
+    #
+    # A part that is named but unrecognised ("spoiler", "front_part") still warns: it is
+    # not on the covered list, and that is exactly what a coverage check should say.
     allowed_parts_raw = policy.get("required_visibility", "")
-    allowed_parts = [p.strip().lower() for p in allowed_parts_raw.replace(",", ";").split(";") if p.strip()]
+    allowed_parts = [p.strip() for p in allowed_parts_raw.replace(",", ";").split(";") if p.strip()]
 
-    if allowed_parts:
-        clean_part = claimed_part.lower().strip()
-        matched = any(p in clean_part or clean_part in p for p in allowed_parts)
-        if not matched:
+    canonical_claimed = normalise_part(claimed_part, claim_object)
+    named_a_part = (claimed_part or "").strip().lower() not in ("", "unknown", "none", "unspecified")
+
+    if allowed_parts and named_a_part:
+        canonical_allowed = {normalise_part(p, claim_object) for p in allowed_parts}
+        if canonical_claimed not in canonical_allowed:
             return PolicyVerificationOutput(
                 status="WARNING",
-                summary=f"Claimed part '{claimed_part}' is not in standard visibility guidelines.",
-                reason=f"The claimed part '{claimed_part}' is not listed in visibility requirements for {claim_object}: {allowed_parts_raw}.",
+                summary=f"'{claimed_part}' is outside the parts this policy covers.",
+                reason=(
+                    f"The claim names {canonical_claimed}, which is not among the parts "
+                    f"covered for {claim_object} claims ({allowed_parts_raw}). The evidence "
+                    f"itself meets requirements; the part may fall outside this policy."
+                ),
                 required_images=required_count,
                 provided_images=provided_count,
                 policy_active=True,
@@ -111,10 +137,15 @@ def run_policy_verification_agent(
             )
 
     # ── All checks passed ──
+    covered = (
+        f"Claimed part '{canonical_claimed}' is within visibility guidelines."
+        if named_a_part
+        else "No specific part was named, so no visibility requirement applies."
+    )
     return PolicyVerificationOutput(
         status="PASS",
         summary=f"Evidence meets all policy requirements for {claim_object} claims.",
-        reason=f"{provided_count} image(s) provided (minimum: {required_count}). Claimed part '{claimed_part}' is within visibility guidelines.",
+        reason=f"{provided_count} image(s) provided (minimum: {required_count}). {covered}",
         required_images=required_count,
         provided_images=provided_count,
         policy_active=True,

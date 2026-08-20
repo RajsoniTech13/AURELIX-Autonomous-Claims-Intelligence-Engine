@@ -33,7 +33,8 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from PIL import Image
 
-from agent_core.agents.alignment import AlignmentResult, compute_alignment
+from agent_core.agents.alignment import AlignmentResult, compute_alignment, normalise_part
+from agent_core.agents.document_check import DocumentCheckResult, run_document_check
 from agent_core.agents.image_quality import UNMEASURED, PreflightQuality, assess_images
 from agent_core.agents.image_validator import preflight, run_image_validator
 from agent_core.agents.perception import (
@@ -68,6 +69,9 @@ PIPELINE_STAGES: tuple[str, ...] = (
     "policy_verification",
     "user_risk",
     "alignment",
+    # Deterministic, and only meaningful once alignment knows what the photographs
+    # show — the document is judged against the observation, not on its own.
+    "document_check",
     "decision",
 )
 
@@ -88,6 +92,7 @@ class ClaimAnalysis:
     policy: Optional[Any] = None
     user_risk: Optional[Any] = None
     duplicate_matches: List[DuplicateMatch] = field(default_factory=list)
+    documents: Optional[DocumentCheckResult] = None
     llm_requests: int = 0
     error: Optional[str] = None
     timeline: List[Dict[str, str]] = field(default_factory=list)
@@ -108,6 +113,12 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
 
     alignment = compute_alignment(perception, row.get("claim_object", "")) if perception else None
 
+    # Documents are judged against the photographs, so this must follow alignment.
+    documents = run_document_check(perception, alignment, row.get("claim_object", ""))
+
+    evidence_notes = [m.describe() for m in entry.get("duplicate_matches") or []]
+    evidence_notes.extend(documents.notes)
+
     verdict = decide(
         alignment, perception,
         no_usable_image=entry.get("no_usable_image", False),
@@ -116,7 +127,8 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
         user_history_risk=entry.get("user_history_risk", False),
         extra_risk_flags=list(getattr(entry.get("validation"), "risk_flags", []) or []),
         preflight_quality=quality,
-        evidence_notes=[m.describe() for m in entry.get("duplicate_matches") or []],
+        evidence_notes=evidence_notes,
+        document_signals=documents.signals,
     )
 
     return {
@@ -125,6 +137,7 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
         "perception": perception,
         "preflight_quality": quality,
         "alignment": alignment,
+        "documents": documents,
         "verdict": verdict,
         "batch_id": entry.get("batch_id"),
         "model": entry.get("model"),
@@ -147,7 +160,20 @@ def to_output_row(result: Dict[str, Any]) -> Dict[str, str]:
         chosen = chosen or (damages[0] if damages else None)
         if chosen:
             issue_type = coerce_to_vocabulary(chosen.issue_type, ISSUE_TYPE_VALUES, "unknown")
-            object_part = coerce_to_vocabulary(chosen.part, OBJECT_PART_VALUES, "unknown")
+            # Normalise before coercing.
+            #
+            # `coerce_to_vocabulary` is an exact-membership check, and the model reports
+            # parts the way a person writes them — "front bumper", "bonnet", "driver
+            # door". None of those are in the frozen vocabulary, which is canonical
+            # ("front_bumper", "hood", "door"), so every naturally-worded part was
+            # silently replaced with "unknown": a real observation, discarded at the CSV
+            # boundary and on the claim record the reviewer reads.
+            #
+            # The ontology already knows these mappings; it just was not consulted here.
+            object_part = coerce_to_vocabulary(
+                normalise_part(chosen.part, row.get("claim_object", "")),
+                OBJECT_PART_VALUES, "unknown",
+            )
             severity = coerce_to_vocabulary(chosen.severity, SEVERITY_VALUES, "unknown")
         elif perception.claimed_part_visible:
             issue_type, severity = "none", "none"
@@ -194,6 +220,7 @@ def analyse_claim_events(
     claim_object: str,
     image_paths: str = "",
     images: Optional[Sequence[Image.Image]] = None,
+    documents: Optional[Sequence[Any]] = None,
     image_base_dir: Optional[str] = None,
     user_history: Optional[Dict[str, Any]] = None,
     evidence_rules: Optional[Dict[str, Any]] = None,
@@ -274,7 +301,7 @@ def analyse_claim_events(
         yield emit("perception", "running")
         prepared = PreparedClaim(
             claim_id=cid, claim_object=claim_object, claim_text=user_claim,
-            images=usable, raw=row,
+            images=usable, raw=row, documents=list(documents or []),
         )
         try:
             perception = run_batch_perception([prepared]).get(cid)
@@ -309,6 +336,13 @@ def analyse_claim_events(
     yield emit("alignment", "running")
     yield emit("alignment", "complete")
 
+    # Always runs, and always reports complete. `skipped` in this pipeline means
+    # "the expensive thing was deliberately not done" — it is reserved for
+    # perception. Cross-checking paperwork is free arithmetic; with no documents
+    # supplied it simply has nothing to say.
+    yield emit("document_check", "running")
+    yield emit("document_check", "complete")
+
     yield emit("decision", "running")
     judged = judge({
         "claim_id": cid, "row": row, "perception": perception,
@@ -336,6 +370,7 @@ def analyse_claim_events(
             policy=policy,
             user_risk=user_risk,
             duplicate_matches=duplicate_matches,
+            documents=judged.get("documents"),
             llm_requests=llm_requests,
             error=error,
             timeline=timeline,

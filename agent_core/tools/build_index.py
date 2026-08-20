@@ -175,6 +175,11 @@ def main() -> int:
                    help="Stored perception, used to index what was observed, not just claimed")
     p.add_argument("--fresh", action="store_true",
                    help="Rebuild from scratch instead of upserting into the existing index")
+    p.add_argument("--no-image-index", action="store_true",
+                   help="Build the text collections only, leaving the image index empty. "
+                        "Use this in a deployed environment: the claims file here is the "
+                        "synthetic benchmark, and its fingerprints must not seed a live "
+                        "duplicate detector.")
     args = p.parse_args()
 
     claims_path = Path(args.claims)
@@ -192,10 +197,22 @@ def main() -> int:
         index.clear()
         print("Image index cleared.")
 
-    stats = build_image_index(rows, Path(args.image_root), index)
-    print(f"Image index : {stats['indexed']} fingerprints "
-          f"({stats['skipped_low_quality']} skipped on quality, {stats['missing']} unreadable) "
-          f"-> {index.path}  [{index.count()} total]")
+    if args.no_image_index:
+        # The claims file this tool reads is the synthetic benchmark. Fingerprinting it
+        # into a deployed index would mean a real claimant's photograph could be matched
+        # against a procedurally generated test render — and the resulting verdict would
+        # accuse them of reusing a photograph from claim "SYN-014", a claim that does not
+        # exist in the production database and that no reviewer can look up.
+        #
+        # The duplicate detector is supposed to start empty and learn from real
+        # submissions. The text collections below are reviewer context and carry no such
+        # risk, so they are still built.
+        print(f"Image index : skipped (--no-image-index)  [{index.count()} existing]")
+    else:
+        stats = build_image_index(rows, Path(args.image_root), index)
+        print(f"Image index : {stats['indexed']} fingerprints "
+              f"({stats['skipped_low_quality']} skipped on quality, {stats['missing']} unreadable) "
+              f"-> {index.path}  [{index.count()} total]")
 
     bundle, stale = build_collections(
         rows, index_dir=Path(args.index_dir), evidence_csv=Path(args.evidence_csv),

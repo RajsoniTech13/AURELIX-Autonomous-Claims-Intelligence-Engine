@@ -150,7 +150,7 @@ def _record(db: Session, job: Job, stage: str, status: str) -> None:
     db.commit()
 
 
-def run_job(job_id: str, images: Optional[list] = None) -> None:
+def run_job(job_id: str, images: Optional[list] = None, documents: Optional[list] = None) -> None:
     """
     Execute one job. Runs on a pool thread with its own session — a Session is not
     thread-safe and must never be shared with the request that created the job.
@@ -173,6 +173,7 @@ def run_job(job_id: str, images: Optional[list] = None) -> None:
             claim_object=payload.get("claim_object", ""),
             image_paths=payload.get("image_paths", ""),
             images=images or None,
+            documents=documents or None,
             image_base_dir=payload.get("image_base_dir"),
             user_history=payload.get("user_history"),
             evidence_rules=payload.get("evidence_rules"),
@@ -187,7 +188,9 @@ def run_job(job_id: str, images: Optional[list] = None) -> None:
             analysis, payload.get("user_id", ""), payload.get("image_paths", ""),
             payload.get("user_claim", ""), payload.get("claim_object", ""),
         )
-        db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis))
+        db_claim = _save_claim_and_audit(
+            db, db_claim, _audit_logs_for(analysis, payload.get("document_paths", "none")),
+        )
 
         job.claim_id = db_claim.id
         job.status = "succeeded"
@@ -206,6 +209,6 @@ def run_job(job_id: str, images: Optional[list] = None) -> None:
         db.close()
 
 
-def submit(job_id: str, images: Optional[list] = None) -> None:
+def submit(job_id: str, images: Optional[list] = None, documents: Optional[list] = None) -> None:
     """Hand the job to the pool. Returns immediately."""
-    executor().submit(run_job, job_id, images)
+    executor().submit(run_job, job_id, images, documents)

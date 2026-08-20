@@ -30,7 +30,7 @@ import io
 import os
 import uuid
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Any, List, Sequence, Tuple
 
 from fastapi import HTTPException, UploadFile
 from PIL import Image
@@ -46,6 +46,17 @@ Image.MAX_IMAGE_PIXELS = 64_000_000  # 64 MP
 _ALLOWED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif", "BMP": ".bmp"}
 
 UPLOAD_URL_PREFIX = "uploads"
+
+# Supporting paperwork. PDFs are passed to the model as inline bytes rather than
+# rendered to images here: Gemini reads PDF natively, so rendering would add a
+# dependency, cost CPU on a 0.1-core container, and lose the text layer that
+# makes an invoice legible at all.
+_DOCUMENT_MIME = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "webp": "image/webp",
+}
+_PDF_MAGIC = b"%PDF-"
 
 
 def upload_dir() -> Path:
@@ -73,6 +84,82 @@ def save_image(raw: bytes, fmt: str) -> str:
     name = f"{uuid.uuid4().hex}{_ALLOWED_FORMATS.get(fmt, '.img')}"
     (upload_dir() / name).write_bytes(raw)
     return f"{UPLOAD_URL_PREFIX}/{name}"
+
+
+async def read_documents(files: Sequence[UploadFile]) -> Tuple[List[Any], str]:
+    """
+    Validate, cap and persist supporting documents.
+
+    Returns Gemini `Part` objects ready to drop into the perception request, and
+    the semicolon-joined stored paths.
+
+    Documents ride in the **same** model request as the photographs, so this adds
+    tokens and zero requests — which is the only reason the capability fits a
+    20-per-day budget.
+
+    Content is sniffed the same way images are: a PDF is confirmed by its `%PDF-`
+    magic bytes, and anything claiming to be an image must decode as one. The
+    stored extension comes from what was actually recognised, never from the
+    filename.
+    """
+    from google.genai import types  # imported lazily; the API layer should not need the SDK
+
+    real = [f for f in files if f and f.filename]
+    if len(real) > settings.MAX_DOCUMENT_FILES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Too many documents: {len(real)}. "
+                f"At most {settings.MAX_DOCUMENT_FILES} per claim."
+            ),
+        )
+
+    parts: List[Any] = []
+    paths: List[str] = []
+    for upload in real:
+        raw = await upload.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail=f"'{upload.filename}' is empty.")
+        if len(raw) > settings.MAX_DOCUMENT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"'{upload.filename}' is {len(raw) // 1024} KB; the limit is "
+                    f"{settings.MAX_DOCUMENT_BYTES // 1024} KB per document."
+                ),
+            )
+
+        if raw.startswith(_PDF_MAGIC):
+            kind, mime = "pdf", _DOCUMENT_MIME["pdf"]
+        else:
+            # Not a PDF, so it must be a readable image of a document.
+            try:
+                probe = Image.open(io.BytesIO(raw))
+                probe.verify()
+                fmt = (probe.format or "").upper()
+                Image.open(io.BytesIO(raw)).load()
+            except Exception:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=415,
+                    detail=(
+                        f"'{upload.filename}' is not a PDF or a readable image. "
+                        f"Supported documents: PDF, JPEG, PNG, WebP."
+                    ),
+                )
+            kind = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}.get(fmt, "")
+            if not kind:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"'{upload.filename}' decoded as {fmt or 'unknown'}, which is not supported.",
+                )
+            mime = _DOCUMENT_MIME[kind]
+
+        name = f"{uuid.uuid4().hex}.{kind}"
+        (upload_dir() / name).write_bytes(raw)
+        paths.append(f"{UPLOAD_URL_PREFIX}/{name}")
+        parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+
+    return parts, ";".join(paths) if paths else "none"
 
 
 async def read_uploads(files: Sequence[UploadFile]) -> Tuple[List[Image.Image], str]:

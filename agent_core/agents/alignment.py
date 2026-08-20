@@ -157,6 +157,17 @@ def normalise_part(part: str, object_category: str = "") -> str:
     return best[1] if best else key or "unknown"
 
 
+# Every part name the ontology can actually resolve to. Used to tell "the
+# claimant named a part we do not cover" from "the claimant named nothing
+# recognisable" — two different situations that need two different answers.
+CANONICAL_PARTS: frozenset[str] = frozenset(_SYNONYMS.values()) - {"unknown", "none"}
+
+
+def is_canonical_part(part: str, object_category: str = "") -> bool:
+    """True when `part` resolves to a part this ontology knows."""
+    return normalise_part(part, object_category) in CANONICAL_PARTS
+
+
 def parts_adjacent(a: str, b: str) -> bool:
     return b in _ADJACENT.get(a, set()) or a in _ADJACENT.get(b, set())
 

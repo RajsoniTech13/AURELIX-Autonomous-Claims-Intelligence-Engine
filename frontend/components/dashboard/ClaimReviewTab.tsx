@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  AlertTriangle, Check, ChevronRight, FileSearch, Loader2, Plus, X, ImageOff,
+  AlertTriangle, ArrowUpRight, Check, ChevronRight, FileSearch, Loader2, Plus, X, ImageOff,
 } from "lucide-react";
 import { assetUrl, submitVerdict } from "@/lib/api";
 import {
@@ -20,6 +20,7 @@ const STAGE_META: Record<string, { label: string; blurb: string }> = {
   policy_verification: { label: "Policy verification", blurb: "Evidence requirements for this object class" },
   user_risk:           { label: "Risk profile",        blurb: "Claim history and velocity signals" },
   alignment:           { label: "Alignment",           blurb: "Claimed part and severity against what was observed" },
+  document_check:      { label: "Document check",      blurb: "Supporting paperwork cross-checked against the photographs" },
   decision:            { label: "Decision",            blurb: "Fraud score, confidence, and the first matching rule" },
   "Human Review (Manual Action)": { label: "Human review", blurb: "Recorded analyst decision" },
 };
@@ -167,6 +168,8 @@ export function ClaimReviewTab({
   const alignment = byAgent.alignment?.outputs ?? null;
   const verdict = byAgent.decision?.outputs ?? null;
   const quality = byAgent.preflight?.outputs ?? null;
+  const docCheck = byAgent.document_check?.outputs ?? null;
+  const docPaths: string[] = byAgent.document_check?.inputs?.document_paths ?? [];
 
   const images: string[] =
     claim.image_paths && claim.image_paths !== "none" ? claim.image_paths.split(";").filter(Boolean) : [];
@@ -380,6 +383,75 @@ export function ClaimReviewTab({
                     The part named in the claim is not visible in any submitted photograph.
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+
+          {/* ── Supporting documents ────────────────────────────────────── */}
+          {docCheck?.count > 0 && (
+            <section>
+              <SectionTitle>
+                Supporting documents{" "}
+                <span className="text-muted-foreground font-normal">({docCheck.count})</span>
+              </SectionTitle>
+              <div className="rounded-lg border border-line bg-surface-1 divide-y divide-line overflow-hidden">
+                {(docCheck.assessments ?? []).map((a: any, i: number) => {
+                  const tone =
+                    a.object_match === "mismatch" || a.part_support === "contradicts" ? "contra"
+                    : a.part_support === "supports" ? "verified"
+                    : !a.legible ? "warning" : "unknown";
+                  return (
+                    <div key={i} className="p-4">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {a.document_id}
+                        </span>
+                        <span className="text-[13px] font-medium capitalize">
+                          {String(a.document_type).replace(/_/g, " ")}
+                        </span>
+                        <StatusBadge tone={tone as any}>
+                          {!a.legible ? "Unreadable"
+                            : a.object_match === "mismatch" ? "Wrong object"
+                            : a.part_support === "supports" ? "Corroborates"
+                            : a.part_support === "contradicts" ? "Contradicts photos"
+                            : "Recorded"}
+                        </StatusBadge>
+                        {typeof a.amount === "number" && (
+                          <span className="tnum text-[12px] text-text-2 ml-auto">
+                            {a.amount.toLocaleString()} {a.currency !== "unknown" ? a.currency : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {a.matched_parts?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {a.matched_parts.map((part: string) => (
+                            <span key={part} className="font-mono text-[11px] rounded border border-line
+                                                        bg-surface-2 px-1.5 py-0.5">
+                              {part}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {a.notes?.length > 0 && (
+                        <p className="text-[13px] leading-relaxed text-text-2">{a.notes.join(" ")}</p>
+                      )}
+
+                      {docPaths[i] && (
+                        <a
+                          href={assetUrl(docPaths[i])}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[12px] text-(--aurelix-accent)
+                                     hover:underline mt-2"
+                        >
+                          Open document <ArrowUpRight className="h-3 w-3" aria-hidden />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}

@@ -91,10 +91,16 @@ def build_facts(
     user_history_risk: bool = False,
     fraud_score: int = 0,
     preflight_quality: Optional[PreflightQuality] = None,
+    document_signals: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Flatten everything the rules may test into one dict."""
     quality, _, _ = effective_quality(perception, preflight_quality)
+    docs = set(document_signals or [])
     return {
+        # Documentary facts, exposed as plain booleans so a rule can name them.
+        "document_object_mismatch": "document_object_mismatch" in docs,
+        "document_part_contradiction": "document_part_contradiction" in docs,
+        "document_amount_implausible": "document_amount_implausible" in docs,
         "no_usable_image": no_usable_image,
         "perception_failed": perception_failed,
         "image_quality": quality,
@@ -145,6 +151,7 @@ def compute_fraud_score(
     duplicate_image_reuse: bool = False,
     user_history_risk: bool = False,
     preflight_quality: Optional[PreflightQuality] = None,
+    document_signals: Optional[List[str]] = None,
 ) -> tuple[int, List[str]]:
     """Additive score over objective signals only. Returns (score, signal names)."""
     cfg = load_rules()["fraud"]
@@ -161,6 +168,9 @@ def compute_fraud_score(
         add("duplicate_image_reuse")
     if user_history_risk:
         add("user_history_risk")
+    for signal in document_signals or []:
+        if signal in weights:
+            add(signal)
     if perception and perception.instruction_like_text_present:
         add("instruction_like_text")
     quality, _, _ = effective_quality(perception, preflight_quality)
@@ -251,6 +261,7 @@ def decide(
     extra_risk_flags: Optional[List[str]] = None,
     preflight_quality: Optional[PreflightQuality] = None,
     evidence_notes: Optional[List[str]] = None,
+    document_signals: Optional[List[str]] = None,
 ) -> Verdict:
     """Run the ordered rules. First match wins; its rule_id is recorded."""
     rules = load_rules()
@@ -260,6 +271,7 @@ def decide(
         duplicate_image_reuse=duplicate_image_reuse,
         user_history_risk=user_history_risk,
         preflight_quality=preflight_quality,
+        document_signals=document_signals,
     )
     confidence = compute_confidence(
         alignment, perception,
@@ -271,6 +283,7 @@ def decide(
         no_usable_image=no_usable_image, perception_failed=perception_failed,
         duplicate_image_reuse=duplicate_image_reuse, user_history_risk=user_history_risk,
         fraud_score=fraud_score, preflight_quality=preflight_quality,
+        document_signals=document_signals,
     )
 
     matched = next(r for r in rules["rules"] if _matches(r["when"], facts))

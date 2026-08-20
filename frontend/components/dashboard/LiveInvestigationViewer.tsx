@@ -39,6 +39,7 @@ const STAGES: { id: string; label: string; detail: string; network?: boolean }[]
   { id: "policy_verification", label: "Policy verification", detail: "Checking evidence requirements for this object" },
   { id: "user_risk",           label: "Risk profile",        detail: "Evaluating claim history and velocity" },
   { id: "alignment",           label: "Alignment",           detail: "Comparing what was claimed with what was observed" },
+  { id: "document_check",      label: "Document check",      detail: "Cross-checking paperwork against the photographs" },
   { id: "decision",            label: "Decision",            detail: "Scoring fraud and confidence, applying ordered rules" },
 ];
 

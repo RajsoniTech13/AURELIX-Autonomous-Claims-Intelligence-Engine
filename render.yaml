@@ -28,7 +28,13 @@ services:
       # The retrieval index is built offline and only loaded at boot. It lives under
       # .aurelix/, which is gitignored local run state, so it has to be built here.
       # Costs no API requests.
-      python -m agent_core.tools.build_index
+      #
+      # --no-image-index is load-bearing: the claims file this reads is the synthetic
+      # benchmark, and fingerprinting it here would seed the live duplicate detector with
+      # test renders. A real claimant could then be contradicted for "reusing" a
+      # photograph from claim SYN-014 — a claim that exists in no production database.
+      # The detector starts empty and learns from real submissions.
+      python -m agent_core.tools.build_index --no-image-index
 
     # One worker on purpose. The blocking SSE route holds a worker for the length of the
     # analysis, and a second worker on 0.1 CPU would contend rather than help. Concurrency

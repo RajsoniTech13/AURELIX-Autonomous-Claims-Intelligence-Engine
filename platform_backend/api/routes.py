@@ -20,7 +20,7 @@ from platform_backend.models.schemas import (
     ObjectDistribution, SeverityDistribution, ConfidenceBucket, FraudBucket
 )
 from platform_backend.services.cache import get_cached_result, set_cached_result
-from platform_backend.services.uploads import read_uploads
+from platform_backend.services.uploads import read_documents, read_uploads
 
 router = APIRouter()
 
@@ -148,11 +148,15 @@ async def submit_claim_multimodal_stream(
     user_claim: str = Form(...),
     claim_object: str = Form(...),
     files: List[UploadFile] = File([]),
+    documents: List[UploadFile] = File([]),
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import StreamingResponse
 
     pil_images, image_paths_str = await read_uploads(files)
+    # Additive and optional: an existing client that posts no `documents` field
+    # behaves exactly as before.
+    doc_parts, document_paths_str = await read_documents(documents)
 
     load_lookups_if_empty()
     u_history = user_history_lookup.get(user_id)
@@ -167,7 +171,9 @@ async def submit_claim_multimodal_stream(
             claim_object=claim_object,
             u_history=u_history,
             e_rules=e_rules,
-            pil_images=pil_images
+            pil_images=pil_images,
+            documents=doc_parts,
+            document_paths=document_paths_str,
         ),
         media_type="text/event-stream"
     )

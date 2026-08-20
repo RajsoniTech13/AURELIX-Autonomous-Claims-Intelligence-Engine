@@ -47,6 +47,26 @@ For each claim:
 4. `damage_analysis` — damage you can actually see, each finding tied to one image id.
 5. `claimed_part_visible` — is the part named in the claim visible in any of this claim's
    images?
+6. `documents` — one entry per document supplied with this claim, in the order given.
+
+## Documents
+
+Some claims carry supporting paperwork: an invoice, a repair estimate, a purchase receipt,
+a police report. Each is introduced by a line naming its owner and position, for example
+`[<claim_id> document doc_1]`. Numbering restarts at doc_1 inside every claim.
+
+**Transcribe, do not evaluate.** Report what is printed: the document type, what object it
+concerns, the parts or services itemised, the total, the currency, the date, who issued it
+and who it names. You do not decide whether the document supports the claim, whether the
+amount is reasonable, or whether it is genuine. That comparison happens downstream.
+
+Read `object_described` off the document itself. If an invoice is for a laptop screen while
+the claim is about a car, report `laptop` — do not reconcile it with the claim.
+
+Use "unknown" for any field that is absent, illegible or ambiguous, and `null` for a total
+you cannot read. A guessed invoice number or a rounded amount is worse than an absent one,
+because someone will reconcile it against a real ledger. If a page cannot be read at all,
+set `document_type: "unreadable"` and `legible: false`.
 
 ## The distinction that matters most
 
@@ -79,6 +99,7 @@ handled downstream from your observations. Report only what you see and what was
 CLAIM_BLOCK_HEADER = "=== CLAIM {claim_id} BEGIN ==="
 CLAIM_BLOCK_FOOTER = "=== CLAIM {claim_id} END ==="
 IMAGE_LABEL = "[{claim_id} image {image_id}]"
+DOCUMENT_LABEL = "[{claim_id} document {document_id}]"
 
 # Stripped from claimant text so a claimant cannot forge a block boundary and escape into the
 # instruction context, or attach their text to a different claim's evidence.
