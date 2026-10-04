@@ -7,9 +7,11 @@ import os
 import csv
 import datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+
+from platform_backend.services import demo_guard
 
 from platform_backend.config import settings
 from platform_backend.db.session import get_db
@@ -46,6 +48,46 @@ def load_lookups_if_empty():
 @router.get("/")
 def read_root():
     return {"message": "AURELIX Claims Intelligence API v2 is online"}
+
+
+def _visitor(request: Request) -> str:
+    return demo_guard.visitor_key(
+        request.client.host if request.client else None,
+        request.headers.get("x-forwarded-for"),
+    )
+
+
+def _require_capacity(request: Request) -> None:
+    """
+    Refuse a live analysis that the shared free-tier budget cannot honestly fund.
+
+    429 rather than 500: nothing is broken, the request is simply not being served now,
+    and `Retry-After` tells the client when it will be. The payload carries the reason
+    so the UI can explain the situation instead of showing a generic failure — the
+    difference between a demo that looks rationed and one that looks dead.
+    """
+    decision = demo_guard.check(_visitor(request))
+    if decision.allowed:
+        return
+    reset = demo_guard.next_reset()
+    raise HTTPException(
+        status_code=429,
+        detail={"reason": decision.reason, "message": decision.detail,
+                "resets_at": reset.isoformat()},
+        headers={"Retry-After": str(max(1, int((reset - datetime.datetime.now(
+            datetime.timezone.utc)).total_seconds())))},
+    )
+
+
+@router.get("/demo/status", tags=["ops"])
+def demo_status(request: Request):
+    """
+    What the front end needs to set expectations before a visitor fills in a form.
+
+    Asked on load, so that a visitor learns the day's budget is spent *before* writing
+    a claim statement and uploading photographs, rather than after.
+    """
+    return demo_guard.status(_visitor(request))
 
 @router.get("/claims", response_model=List[ClaimSchema])
 def list_claims(
@@ -113,12 +155,14 @@ def submit_claim(claim_in: ClaimCreate, db: Session = Depends(get_db)):
 
 @router.post("/claims/submit-multimodal", response_model=ClaimDetailSchema)
 async def submit_claim_multimodal(
+    request: Request,
     user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
     files: List[UploadFile] = File([]),
     db: Session = Depends(get_db)
 ):
+    _require_capacity(request)
     pil_images, image_paths_str = await read_uploads(files)
 
     load_lookups_if_empty()
@@ -144,6 +188,7 @@ async def submit_claim_multimodal(
 
 @router.post("/claims/submit-multimodal-stream")
 async def submit_claim_multimodal_stream(
+    request: Request,
     user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
@@ -152,6 +197,10 @@ async def submit_claim_multimodal_stream(
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import StreamingResponse
+
+    # Before the uploads are read, so a refused request costs no disk and no decode.
+    _require_capacity(request)
+    demo_guard.consume(_visitor(request))
 
     pil_images, image_paths_str = await read_uploads(files)
     # Additive and optional: an existing client that posts no `documents` field
