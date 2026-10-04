@@ -103,3 +103,56 @@ circuit_breaker:
 # graph analyse a claim from its text when no image loaded. The batched pipeline never
 # asks: no usable image short-circuits to not_enough_information at preflight. See the
 # note in agent_core/services/config.py. `max_images_per_claim` lives under `batching`.
+
+# ─── Text tasks (Phase 7) ────────────────────────────────────────────────────
+# Text-in, structured-answer-out calls made through `agent_core/llm/gateway.py`. Never
+# used by the claim pipeline: perception keeps its own ladder above, and no text task
+# decides, scores or changes a verdict.
+#
+# Each task has a ladder of {provider, model} rungs, tried in order. A rung is skipped when
+# its provider has no key (that is expected: the free deploy has no OpenAI or Anthropic
+# key), and abandoned for the next when it is rate-limited, out of quota, down, or answers
+# badly. On free tiers the ladder IS the retry policy.
+#
+# Why Groq first: its free tier gives openai/gpt-oss-20b 1,000 requests/day at 30/min, with
+# strict json_schema output (console.groq.com/docs/rate-limits and /structured-outputs,
+# read 2026-10-04) — fifty times Gemini's 20/day, and a budget the public demo's claim
+# analysis does not share.
+#
+# Why gemini-2.5-flash-lite as the fallback: perception does not use it (it 404s on the
+# batched multimodal request shape), so it is a separate 20/day budget. The Gemini adapter
+# REFUSES any model on the perception chain above, so a text task can never spend
+# perception's budget. Its behaviour on the text request shape has not been tested live.
+text_tasks:
+  copilot_answer:
+    prompt_version: copilot-v1
+    max_output_tokens: 700
+    cache_ttl_seconds: 3600
+    ladder:
+      - provider: groq
+        model: openai/gpt-oss-20b
+        options:
+          # gpt-oss is a reasoning model. Low effort: the answer is a short summary of
+          # clauses that are already in the prompt, not a problem to think through.
+          reasoning_effort: low
+      - provider: gemini
+        model: gemini-2.5-flash-lite
+        options:
+          temperature: 0.1
+      # Optional, paid. Uncomment and set the key to use.
+      # - provider: openai
+      #   model: gpt-5-nano
+      # - provider: anthropic
+      #   model: claude-opus-5-5
+
+text_providers:
+  groq:
+    api_key_env: GROQ_API_KEY
+    base_url: https://api.groq.com/openai/v1
+    timeout_seconds: 30
+  openai:
+    api_key_env: OPENAI_API_KEY
+    timeout_seconds: 30
+  anthropic:
+    api_key_env: ANTHROPIC_API_KEY
+    timeout_seconds: 60

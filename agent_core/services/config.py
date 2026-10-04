@@ -58,6 +58,16 @@ def circuit_breaker_config() -> Dict[str, Any]:
     return load_config()["circuit_breaker"]
 
 
+def text_tasks_config() -> Dict[str, Any]:
+    """Routing for text tasks served by `agent_core/llm/gateway.py`. Empty if absent."""
+    return load_config().get("text_tasks") or {}
+
+
+def text_providers_config() -> Dict[str, Any]:
+    """Per-provider connection settings (key variable, base URL, timeout) for the gateway."""
+    return load_config().get("text_providers") or {}
+
+
 # `evidence_config()` and the `evidence:` block it read are gone.
 #
 # They controlled `allow_text_only_inference`: an opt-in that let the old graph analyse a
