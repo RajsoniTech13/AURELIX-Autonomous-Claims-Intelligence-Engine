@@ -1,0 +1,398 @@
+{
+ "results": [
+  {
+   "name": "bm25",
+   "describe": "BM25 only",
+   "recall@1": 0.4766,
+   "recall@3": 0.7448,
+   "recall@5": 0.8281,
+   "hit@5": 0.875,
+   "mrr": 0.7118,
+   "ndcg@5": 0.7107,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 0.8125,
+    "multi": 0.5833
+   },
+   "not_found": {
+    "threshold": 3.6746,
+    "in_sample_accuracy": 0.85,
+    "leave_one_out_accuracy": 0.825,
+    "answerable_refused": 0,
+    "unanswerable_accepted": 6
+   },
+   "median_query_ms": 0.07,
+   "build_ms": 3.3,
+   "misses_at_5": [
+    {
+     "id": "Q18",
+     "question": "The courier delivered my parcel squashed. Will you pay for that?",
+     "gold": [
+      "COV-4"
+     ],
+     "top3": [
+      "EXC-4",
+      "ASM-5",
+      "EVD-3"
+     ]
+    },
+    {
+     "id": "Q20",
+     "question": "I've made a lot of claims in the past. Will that count against me?",
+     "gold": [
+      "FRD-4"
+     ],
+     "top3": [
+      "ASM-1",
+      "EXC-4",
+      "EVD-6"
+     ]
+    },
+    {
+     "id": "Q25",
+     "question": "How can I find out why my claim was decided the way it was?",
+     "gold": [
+      "REV-2"
+     ],
+     "top3": [
+      "EXC-5",
+      "PRC-3",
+      "ASM-6"
+     ]
+    },
+    {
+     "id": "Q32",
+     "question": "If the same photo was used in another claim, how does that affect the fraud assessment?",
+     "gold": [
+      "FRD-1",
+      "FRD-2"
+     ],
+     "top3": [
+      "FRD-3",
+      "ASM-6",
+      "ASM-1"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dense-lsa",
+   "describe": "LSA (TF-IDF + SVD) only",
+   "recall@1": 0.4609,
+   "recall@3": 0.7083,
+   "recall@5": 0.7708,
+   "hit@5": 0.8438,
+   "mrr": 0.6613,
+   "ndcg@5": 0.6601,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 0.75,
+    "multi": 0.4444
+   },
+   "not_found": {
+    "threshold": 0.5353,
+    "in_sample_accuracy": 0.8,
+    "leave_one_out_accuracy": 0.775,
+    "answerable_refused": 0,
+    "unanswerable_accepted": 8
+   },
+   "median_query_ms": 0.04,
+   "build_ms": 3.3,
+   "misses_at_5": [
+    {
+     "id": "Q11",
+     "question": "My car got rusty over the years, can I claim for that?",
+     "gold": [
+      "EXC-2"
+     ],
+     "top3": [
+      "ASM-2",
+      "FRD-4",
+      "EXC-1"
+     ]
+    },
+    {
+     "id": "Q18",
+     "question": "The courier delivered my parcel squashed. Will you pay for that?",
+     "gold": [
+      "COV-4"
+     ],
+     "top3": [
+      "EXC-4",
+      "ASM-5",
+      "EXC-1"
+     ]
+    },
+    {
+     "id": "Q20",
+     "question": "I've made a lot of claims in the past. Will that count against me?",
+     "gold": [
+      "FRD-4"
+     ],
+     "top3": [
+      "ASM-1",
+      "EXC-4",
+      "EVD-6"
+     ]
+    },
+    {
+     "id": "Q25",
+     "question": "How can I find out why my claim was decided the way it was?",
+     "gold": [
+      "REV-2"
+     ],
+     "top3": [
+      "EXC-5",
+      "PRC-3",
+      "ASM-6"
+     ]
+    },
+    {
+     "id": "Q32",
+     "question": "If the same photo was used in another claim, how does that affect the fraud assessment?",
+     "gold": [
+      "FRD-1",
+      "FRD-2"
+     ],
+     "top3": [
+      "ASM-6",
+      "FRD-3",
+      "ASM-5"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "hybrid-lsa",
+   "describe": "BM25 + LSA, RRF",
+   "recall@1": 0.4453,
+   "recall@3": 0.724,
+   "recall@5": 0.8177,
+   "hit@5": 0.875,
+   "mrr": 0.6879,
+   "ndcg@5": 0.6869,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 0.8125,
+    "multi": 0.5278
+   },
+   "not_found": {
+    "threshold": 0.5353,
+    "in_sample_accuracy": 0.8,
+    "leave_one_out_accuracy": 0.775,
+    "answerable_refused": 0,
+    "unanswerable_accepted": 8
+   },
+   "median_query_ms": 0.09,
+   "build_ms": 3.3,
+   "misses_at_5": [
+    {
+     "id": "Q18",
+     "question": "The courier delivered my parcel squashed. Will you pay for that?",
+     "gold": [
+      "COV-4"
+     ],
+     "top3": [
+      "EXC-4",
+      "ASM-5",
+      "EVD-3"
+     ]
+    },
+    {
+     "id": "Q20",
+     "question": "I've made a lot of claims in the past. Will that count against me?",
+     "gold": [
+      "FRD-4"
+     ],
+     "top3": [
+      "ASM-1",
+      "EXC-4",
+      "EVD-6"
+     ]
+    },
+    {
+     "id": "Q25",
+     "question": "How can I find out why my claim was decided the way it was?",
+     "gold": [
+      "REV-2"
+     ],
+     "top3": [
+      "EXC-5",
+      "PRC-3",
+      "ASM-6"
+     ]
+    },
+    {
+     "id": "Q32",
+     "question": "If the same photo was used in another claim, how does that affect the fraud assessment?",
+     "gold": [
+      "FRD-1",
+      "FRD-2"
+     ],
+     "top3": [
+      "ASM-6",
+      "FRD-3",
+      "ASM-1"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dense-bge",
+   "describe": "BAAI/bge-small-en-v1.5 only",
+   "recall@1": 0.7005,
+   "recall@3": 0.8984,
+   "recall@5": 0.9323,
+   "hit@5": 0.9688,
+   "mrr": 0.9055,
+   "ndcg@5": 0.8813,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 0.9375,
+    "multi": 0.8056
+   },
+   "not_found": {
+    "threshold": 0.6437,
+    "in_sample_accuracy": 0.975,
+    "leave_one_out_accuracy": 0.925,
+    "answerable_refused": 1,
+    "unanswerable_accepted": 0
+   },
+   "median_query_ms": 3.3,
+   "build_ms": 671.9,
+   "misses_at_5": [
+    {
+     "id": "Q15",
+     "question": "The bodywork is only slightly scuffed but I described it as a write-off. Does that matter?",
+     "gold": [
+      "ASM-4"
+     ],
+     "top3": [
+      "EXC-3",
+      "EVD-2",
+      "ASM-3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "hybrid-bge",
+   "describe": "BM25 + BAAI/bge-small-en-v1.5, RRF",
+   "recall@1": 0.6745,
+   "recall@3": 0.9115,
+   "recall@5": 0.9609,
+   "hit@5": 1.0,
+   "mrr": 0.8854,
+   "ndcg@5": 0.8888,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 1.0,
+    "multi": 0.7917
+   },
+   "not_found": {
+    "threshold": 0.6406,
+    "in_sample_accuracy": 0.975,
+    "leave_one_out_accuracy": 0.925,
+    "answerable_refused": 1,
+    "unanswerable_accepted": 0
+   },
+   "median_query_ms": 3.26,
+   "build_ms": 671.9,
+   "misses_at_5": []
+  },
+  {
+   "name": "dense-bge-prefix",
+   "describe": "BAAI/bge-small-en-v1.5 only, bge query instruction",
+   "recall@1": 0.6797,
+   "recall@3": 0.8906,
+   "recall@5": 0.9792,
+   "hit@5": 1.0,
+   "mrr": 0.8708,
+   "ndcg@5": 0.8887,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 1.0,
+    "multi": 0.8889
+   },
+   "not_found": {
+    "threshold": 0.5762,
+    "in_sample_accuracy": 0.925,
+    "leave_one_out_accuracy": 0.875,
+    "answerable_refused": 0,
+    "unanswerable_accepted": 3
+   },
+   "median_query_ms": 3.89,
+   "build_ms": 504.1,
+   "misses_at_5": []
+  },
+  {
+   "name": "hybrid-bge-prefix",
+   "describe": "BM25 + BAAI/bge-small-en-v1.5, bge query instruction, RRF",
+   "recall@1": 0.6901,
+   "recall@3": 0.9062,
+   "recall@5": 0.9453,
+   "hit@5": 1.0,
+   "mrr": 0.8984,
+   "ndcg@5": 0.8881,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 1.0,
+    "multi": 0.7083
+   },
+   "not_found": {
+    "threshold": 0.5753,
+    "in_sample_accuracy": 0.925,
+    "leave_one_out_accuracy": 0.875,
+    "answerable_refused": 0,
+    "unanswerable_accepted": 3
+   },
+   "median_query_ms": 4.4,
+   "build_ms": 504.1,
+   "misses_at_5": []
+  },
+  {
+   "name": "hybrid-bge+rerank",
+   "describe": "BM25 + BAAI/bge-small-en-v1.5, RRF, then Xenova/ms-marco-MiniLM-L-6-v2 over the top 10",
+   "recall@1": 0.7474,
+   "recall@3": 0.8828,
+   "recall@5": 0.9062,
+   "hit@5": 0.9688,
+   "mrr": 0.9271,
+   "ndcg@5": 0.885,
+   "recall@5_by_type": {
+    "exact": 1.0,
+    "paraphrase": 0.9375,
+    "multi": 0.6667
+   },
+   "not_found": {
+    "threshold": -7.8189,
+    "in_sample_accuracy": 0.925,
+    "leave_one_out_accuracy": 0.825,
+    "answerable_refused": 2,
+    "unanswerable_accepted": 1
+   },
+   "median_query_ms": 51.07,
+   "build_ms": 671.9,
+   "misses_at_5": [
+    {
+     "id": "Q25",
+     "question": "How can I find out why my claim was decided the way it was?",
+     "gold": [
+      "REV-2"
+     ],
+     "top3": [
+      "ASM-6",
+      "PRC-3",
+      "ASM-1"
+     ]
+    }
+   ]
+  }
+ ],
+ "memory_mb": {
+  "lsa": 72.8,
+  "fastembed": 360.1,
+  "fastembed+rerank": 520.7,
+  "serving": 287.3
+ }
+}

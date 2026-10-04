@@ -14,7 +14,9 @@ Built once and loaded at process start rather than rebuilt per claim — which i
   read from stored perception. Narrative alone retrieves claims that sound alike; adding the
   outcome retrieves claims that turned out alike.
 * **`policy_rules`** — evidence requirements chunked one per requirement, each with a stable
-  `rule_id`, so a compliance failure can cite `EV-CAR-COUNT` rather than "the car policy".
+  `rule_id`, so a compliance failure can cite `EV-CAR-COUNT` rather than "the car policy";
+  plus the policy wording (`knowledge/policies/`), one document per clause, which is what the
+  Policy Copilot retrieves from.
 * **`fraud_patterns`** — the curated playbook, for reviewer context only.
 
 Builds are **upserts** by default (`--fresh` to start over), so a nightly run can add new
@@ -25,7 +27,9 @@ Only images the Phase 4.1 quality gate accepts are indexed. A near-featureless i
 unstable perceptual hash (measured: 22 bits of drift under nothing worse than a JPEG
 re-encode), so indexing one manufactures false accusations later.
 
-No model is called. This costs nothing.
+No generative model is called and no API quota is spent. With the `fastembed` dense backend
+the build downloads a 67 MB embedding model once (to `.aurelix/models/`) and embeds only the
+documents whose content changed since the last build.
 """
 from __future__ import annotations
 
@@ -50,6 +54,7 @@ from agent_core.retrieval.collections import (
     build_policy_rules,
 )
 from agent_core.retrieval.hybrid import HybridRetriever
+from agent_core.retrieval.policy_corpus import DEFAULT_POLICY, build_policy_clauses
 from agent_core.retrieval.image_index import ImageIndex, IndexedImage, content_hash, indexable
 from agent_core.retrieval.hashing import fingerprint
 
@@ -134,6 +139,7 @@ def build_collections(
     fraud_patterns_yaml: Path,
     results_json: Path,
     fresh: bool = False,
+    policy_md: Path = DEFAULT_POLICY,
 ) -> IndexBundle:
     """
     Build all three collections and persist them with a manifest.
@@ -147,7 +153,7 @@ def build_collections(
 
     current = {
         HISTORICAL_CLAIMS: build_historical_claims(rows, observed_outcomes(results_json)),
-        POLICY_RULES: build_policy_rules(evidence_csv),
+        POLICY_RULES: build_policy_rules(evidence_csv) + build_policy_clauses(policy_md),
         FRAUD_PATTERNS: build_fraud_patterns(fraud_patterns_yaml),
     }
     stale = bundle.stale_collections(current)
@@ -171,6 +177,8 @@ def main() -> int:
                    help="Directory for the three-collection index and its manifest")
     p.add_argument("--evidence-csv", default=str(DEFAULT_EVIDENCE_CSV))
     p.add_argument("--fraud-patterns", default=str(DEFAULT_FRAUD_PATTERNS))
+    p.add_argument("--policy", default=str(DEFAULT_POLICY),
+                   help="Policy wording (markdown, one ### heading per clause)")
     p.add_argument("--results", default=str(DEFAULT_RESULTS),
                    help="Stored perception, used to index what was observed, not just claimed")
     p.add_argument("--fresh", action="store_true",
@@ -217,15 +225,20 @@ def main() -> int:
     bundle, stale = build_collections(
         rows, index_dir=Path(args.index_dir), evidence_csv=Path(args.evidence_csv),
         fraud_patterns_yaml=Path(args.fraud_patterns), results_json=Path(args.results),
-        fresh=args.fresh,
+        fresh=args.fresh, policy_md=Path(args.policy),
     )
     for name in (HISTORICAL_CLAIMS, POLICY_RULES, FRAUD_PATTERNS):
         meta = bundle.meta.get(name)
         marker = "  (rebuilt — source changed)" if name in stale else ""
+        retriever = bundle.retriever(name)
         print(f"{name:18}: {meta.count if meta else 0:3d} documents  "
-              f"fingerprint {meta.fingerprint if meta else '-'}{marker}")
+              f"fingerprint {meta.fingerprint if meta else '-'}{marker}  "
+              f"[{retriever.dense.identity}: embedded {retriever.last_build['embedded']}, "
+              f"reused {retriever.last_build['reused']}]")
+        if retriever.dense_fallback:
+            print(f"{'':18}  dense fallback to LSA: {retriever.dense_fallback}")
     print(f"Manifest    : {Path(args.index_dir) / 'manifest.json'}  (index_version {INDEX_VERSION})")
-    print("No API calls were made.")
+    print("No generative-model calls were made and no API quota was spent.")
     return 0
 
 

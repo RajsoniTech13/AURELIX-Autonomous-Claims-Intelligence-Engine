@@ -13,6 +13,8 @@ module-level spy the older guardrail tests use — with only the network replace
 """
 from __future__ import annotations
 
+from tests.auth_helpers import auth_headers
+
 import io
 import json
 from pathlib import Path
@@ -176,7 +178,7 @@ def api(tmp_path, monkeypatch, fake_genai):
             db.close()
 
     app.dependency_overrides[session_module.get_db] = override
-    with TestClient(app) as client:
+    with TestClient(app, headers=auth_headers("reviewer")) as client:
         client.Testing = Testing  # type: ignore[attr-defined]
         yield client
     app.dependency_overrides.clear()

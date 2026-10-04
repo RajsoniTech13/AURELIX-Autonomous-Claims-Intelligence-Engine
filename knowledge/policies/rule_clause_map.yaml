@@ -1,0 +1,61 @@
+# AURELIX — which policy clauses justify which decision rule.
+#
+# Read by `GET /api/v1/claims/{id}/explanation`, which answers "why was this claim decided
+# this way?" with the rule that fired and the clause text behind it — deterministically,
+# with no model call.
+#
+# Completeness is enforced by tests/test_policy_corpus.py: every rule id in
+# config/decision_rules.yaml must appear here, and every clause named here must exist in the
+# policy document. Adding a rule without saying which clause justifies it fails the build.
+
+policy: knowledge/policies/aurelix_protection_policy_v1.md
+version: "1.0"
+
+# Ordered decision rules (config/decision_rules.yaml).
+rules:
+  R001_no_usable_image: [EVD-1, EVD-5]
+  R002_perception_unavailable: [ASM-6, REV-1]
+  R010_wrong_object: [ASM-2, DEF-2]
+  R003_image_quality_unusable: [EVD-5, PRC-3]
+  R020_claimed_part_not_visible: [EVD-2, ASM-1]
+  R021_part_never_specified: [PRC-1]
+  R030_duplicate_image_reuse: [FRD-1, EXC-3]
+  R031_high_fraud_score: [FRD-2]
+  R040_part_mismatch: [ASM-3, EXC-5]
+  R041_no_damage_on_visible_part: [ASM-3]
+  R043_document_wrong_object: [ASM-5, EVD-6]
+  R044_document_part_contradiction: [ASM-5, EVD-6]
+  R042_severity_inflation: [ASM-4, EXC-5]
+  R050_supported_with_overstatement: [ASM-4, COV-1]
+  R051_supported_adjacent: [COV-5, COV-1]
+  R052_supported: [COV-1, DEF-4]
+  R099_indeterminate: [ASM-6, PRC-2]
+
+# Fraud signals, which appear in a verdict's rule_ids as `FRAUD:<signal>`.
+fraud_signals:
+  duplicate_image_reuse: [FRD-1]
+  object_mismatch: [FRD-2, ASM-2]
+  part_mismatch_with_damage_elsewhere: [FRD-2, ASM-3]
+  severity_inflation: [FRD-2, ASM-4]
+  user_history_risk: [FRD-4]
+  instruction_like_text: [FRD-3]
+  poor_image_quality: [FRD-2, EVD-5]
+  document_object_mismatch: [ASM-5]
+  document_part_contradiction: [ASM-5]
+  document_amount_implausible: [ASM-5]
+
+# Evidence-requirement checks from the policy verification stage: EV-<OBJECT>-<SUFFIX>.
+evidence_checks:
+  COUNT: [EVD-1]
+  VISIBILITY: [EVD-2, EXC-1]
+  ANGLE: [EVD-3]
+  TYPE: [EVD-4]
+
+# Escalation to a human reviewer.
+escalation: [REV-1]
+
+# The cover clause for each object, added to the explanation of a supported claim.
+object_cover:
+  car: COV-2
+  laptop: COV-3
+  package: COV-4

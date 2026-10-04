@@ -12,11 +12,15 @@ dependent. Blending them requires a normalisation and a weight, both of which ha
 re-fitted whenever the corpus changes, and neither of which anybody ever re-fits. RRF needs
 only the ranks, so it has one constant and no calibration debt.
 
-**Why LSA for the dense arm.** It retrieves on term co-occurrence rather than exact overlap,
-which is what "dense" is for here, and it costs nothing: a truncated SVD in numpy, no
-network, no quota. It is **not** a transformer embedding and this module does not pretend
-otherwise — `GeminiEmbeddingBackend` implements the same interface for when spending request
-budget on embeddings is authorised.
+**The dense arm is pluggable** (`hybrid.dense.backend` in `config/retrieval.yaml`):
+
+* `lsa` — TF-IDF then a truncated SVD in numpy. Retrieves on term co-occurrence, costs
+  nothing, needs no model. Not a transformer embedding, and not described as one.
+* `fastembed` — a real sentence-embedding model (bge-small-en-v1.5) run locally on CPU.
+* `gemini` — Gemini embeddings, quota-ledgered and refused unless explicitly authorised.
+
+The two embedding backends live in `retrieval/embeddings.py`. If an embedding model cannot
+be loaded, the retriever falls back to LSA and says so, rather than failing the request.
 
 **Metadata filtering is applied before scoring**, not as a post-filter over the top-k.
 Post-filtering silently returns fewer than k results, and does so most often exactly when
@@ -25,6 +29,7 @@ the corpus is dominated by another category — the case the filter exists for.
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence
@@ -55,6 +60,10 @@ class RetrievalResult:
     score: float
     dense_rank: Optional[int] = None
     sparse_rank: Optional[int] = None
+    # Raw per-arm scores. The fused RRF score says how a document *ranked*, not how well it
+    # *matched*, so a "not in the policy" threshold has to look at these instead.
+    dense_score: Optional[float] = None
+    sparse_score: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {
@@ -62,15 +71,26 @@ class RetrievalResult:
             "score": round(self.score, 6),
             "dense_rank": self.dense_rank,
             "sparse_rank": self.sparse_rank,
+            "dense_score": None if self.dense_score is None else round(self.dense_score, 6),
+            "sparse_score": None if self.sparse_score is None else round(self.sparse_score, 6),
             "metadata": dict(self.document.metadata),
         }
 
 
 class DenseBackend(Protocol):
-    """Swappable so an embedding model can replace LSA without touching the fusion."""
+    """
+    Swappable so an embedding model can replace LSA without touching the fusion.
+
+    `encode` is for documents, `encode_query` for the question: some embedding models embed
+    the two differently. `identity` names the vector space, so vectors saved by one model
+    are never compared with a query embedded by another.
+    """
+
+    identity: str
 
     def fit(self, texts: Sequence[str]) -> None: ...
     def encode(self, texts: Sequence[str]) -> np.ndarray: ...
+    def encode_query(self, text: str) -> np.ndarray: ...
 
 
 class LSABackend:
@@ -80,7 +100,9 @@ class LSABackend:
     Vectors are L2-normalised at both ends so a dot product is a cosine.
     """
 
-    def __init__(self, components: int = 64, min_df: int = 1):
+    name = "lsa"
+
+    def __init__(self, components: int = 64, min_df: int = 1, **_: object):
         self.components = components
         self.min_df = min_df
         self.vocab: Dict[str, int] = {}
@@ -123,6 +145,11 @@ class LSABackend:
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         return matrix / np.where(norms == 0, 1.0, norms)
 
+    @property
+    def identity(self) -> str:
+        # LSA is fitted to its corpus, so its vectors are never reused across builds.
+        return f"lsa:{self.components}:{self.min_df}"
+
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         if self.projection.size == 0:
             return np.zeros((len(texts), 1))
@@ -130,69 +157,113 @@ class LSABackend:
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         return vectors / np.where(norms == 0, 1.0, norms)
 
-
-class GeminiEmbeddingBackend:
-    """
-    Placeholder for `gemini-embedding-001` behind the same interface.
-
-    Deliberately not implemented. Embedding generation spends request budget, and the brief
-    is explicit that quota is not to be spent on it without approval. The interface exists
-    so switching backends is a config change (`hybrid.dense.backend`) rather than a rewrite —
-    and so that "we chose not to spend quota" stays visible in the code instead of becoming
-    an undocumented absence.
-    """
-
-    def fit(self, texts: Sequence[str]) -> None:
-        raise NotImplementedError(
-            "Gemini embeddings are not enabled: generating them spends request quota. "
-            "Set hybrid.dense.backend: lsa, or authorise the request budget first."
-        )
-
-    def encode(self, texts: Sequence[str]) -> np.ndarray:
-        raise NotImplementedError(self.fit.__doc__)
+    def encode_query(self, text: str) -> np.ndarray:
+        return self.encode([text])[0]
 
 
-_BACKENDS = {"lsa": LSABackend, "gemini": GeminiEmbeddingBackend}
+# Imported here, after LSABackend, because embeddings.py has no dependency on this module and
+# the registry is the one place that needs both.
+from agent_core.retrieval.embeddings import (  # noqa: E402
+    EmbeddingUnavailable,
+    FastEmbedBackend,
+    GeminiEmbeddingBackend,
+)
+from agent_core.retrieval.vector_store import NumpyVectorStore  # noqa: E402
+
+_BACKENDS = {"lsa": LSABackend, "fastembed": FastEmbedBackend, "gemini": GeminiEmbeddingBackend}
 
 
 class HybridRetriever:
     """Dense + BM25 + RRF, with mandatory metadata filtering."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, dense: Optional[DenseBackend] = None):
         cfg = config or load_retrieval_config()["hybrid"]
         self.cfg = cfg
-        dense_cfg = cfg.get("dense", {})
-        backend_name = dense_cfg.get("backend", "lsa")
-        if backend_name not in _BACKENDS:
+        dense_cfg = dict(cfg.get("dense", {}))
+        backend_name = dense_cfg.pop("backend", "lsa")
+        # An operational override, so the embedding model can be switched off on a live
+        # instance (memory pressure, a bad model download) without a code change or deploy.
+        # The test suite sets it to `lsa` so it never downloads a model.
+        backend_name = os.getenv("AURELIX_DENSE_BACKEND") or backend_name
+        if dense is None and backend_name not in _BACKENDS:
             raise ValueError(f"unknown dense backend {backend_name!r}; choose from {sorted(_BACKENDS)}")
-        self.dense: DenseBackend = _BACKENDS[backend_name](
-            components=dense_cfg.get("components", 64), min_df=dense_cfg.get("min_df", 1),
-        ) if backend_name == "lsa" else _BACKENDS[backend_name]()
+        # `dense` is injectable so tests can use a fake embedder with no model download.
+        self.dense: DenseBackend = dense or _BACKENDS[backend_name](**dense_cfg)
+        self._lsa_cfg = {k: dense_cfg[k] for k in ("components", "min_df") if k in dense_cfg}
 
         self.documents: List[Document] = []
-        self._vectors: np.ndarray = np.zeros((0, 0))
+        self.store = NumpyVectorStore()
         self._bm25: Optional[BM25Okapi] = None
+        self._token_sets: List[set] = []
+        # Set when the configured embedding model could not be used and LSA stood in.
+        self.dense_fallback: Optional[str] = None
+        self.last_build: Dict[str, int] = {"embedded": 0, "reused": 0}
 
     # ── index ──
 
-    def index(self, documents: Iterable[Document]) -> "HybridRetriever":
+    def index(self, documents: Iterable[Document],
+              previous: Optional[NumpyVectorStore] = None,
+              embed_documents: bool = True) -> "HybridRetriever":
         """
         Build both arms once. Called at index-build time, never per query.
 
-        The store this replaces re-derived its vocabulary and IDF table inside `search`,
-        which made every retrieval O(corpus).
+        `previous` is a store built earlier in the same vector space. A document whose
+        `content_hash` matches the one stored there keeps its vector; only new or changed
+        documents are embedded. That is what makes a rebuild after editing one clause cost
+        one embedding instead of thirty-five.
+
+        `embed_documents=False` is the serving path. Embedding the corpus is a build-time job:
+        measured, it grows the process by ~139 MB of ONNX working memory for 35 clauses,
+        which a 512 MB instance cannot spare. Without saved vectors the retriever falls back
+        to LSA rather than embedding inside the web process; with them it loads the model
+        only to embed the question, on first use.
         """
         self.documents = list(documents)
+        self.store = NumpyVectorStore()
         texts = [d.text for d in self.documents]
         if not texts:
-            self._vectors = np.zeros((0, 0))
             self._bm25 = None
             return self
 
-        self.dense.fit(texts)
-        self._vectors = self.dense.encode(texts)
-        self._bm25 = BM25Okapi([tokenize(t) for t in texts])
+        tokens = [tokenize(t) for t in texts]
+        self._bm25 = BM25Okapi(tokens)
+        self._token_sets = [set(t) for t in tokens]
+        try:
+            self._index_dense(previous, embed_documents)
+        except EmbeddingUnavailable as exc:
+            # Degrade, do not fail: a retriever without its embedding model still retrieves,
+            # on term co-occurrence. The reason is kept so /ready and the eval can report it.
+            self.dense_fallback = str(exc)
+            self.dense = LSABackend(**self._lsa_cfg)
+            self._index_dense(None)
         return self
+
+    def _index_dense(self, previous: Optional[NumpyVectorStore], embed_documents: bool = True) -> None:
+        self.dense.fit([d.text for d in self.documents])
+        reusable: Dict[str, np.ndarray] = {}
+        if previous is not None:
+            for doc in self.documents:
+                stored = previous.vector(doc.doc_id)
+                meta = previous.metadata[previous.ids.index(doc.doc_id)] if stored is not None else {}
+                if stored is not None and meta.get("content_hash") == _content_hash(doc):
+                    reusable[doc.doc_id] = stored
+
+        missing = [d for d in self.documents if d.doc_id not in reusable]
+        if missing and not embed_documents and not isinstance(self.dense, LSABackend):
+            raise EmbeddingUnavailable(
+                f"{len(missing)} document(s) have no saved vectors and embedding at serve time "
+                f"is disabled; run `python -m agent_core.tools.build_index`"
+            )
+        fresh = self.dense.encode([d.text for d in missing]) if missing else np.zeros((0, 0))
+        vectors = dict(reusable)
+        vectors.update({d.doc_id: v for d, v in zip(missing, fresh)})
+
+        self.store.upsert(
+            [d.doc_id for d in self.documents],
+            np.vstack([vectors[d.doc_id] for d in self.documents]),
+            [{**d.metadata, "content_hash": _content_hash(d)} for d in self.documents],
+        )
+        self.last_build = {"embedded": len(missing), "reused": len(reusable)}
 
     # ── query ──
 
@@ -202,9 +273,16 @@ class HybridRetriever:
         *,
         filters: Optional[Dict[str, Any]] = None,
         top_k: Optional[int] = None,
+        mode: str = "hybrid",
     ) -> List[RetrievalResult]:
+        """
+        `mode` is `hybrid` (both arms, RRF-fused), `dense` or `sparse` — the single-arm modes
+        exist so the evaluation can measure what fusion adds, rather than assert it.
+        """
         if not self.documents:
             return []
+        if mode not in ("hybrid", "dense", "sparse"):
+            raise ValueError(f"unknown mode {mode!r}")
 
         top_k = top_k or int(self.cfg.get("top_k", 5))
         pool = int(self.cfg.get("candidates_per_arm", 20))
@@ -214,8 +292,8 @@ class HybridRetriever:
         if not allowed:
             return []
 
-        dense_ranks = self._rank_dense(query, allowed, pool)
-        sparse_ranks = self._rank_sparse(query, allowed, pool)
+        dense_ranks, dense_scores = self._rank_dense(query, allowed, pool) if mode != "sparse" else ([], {})
+        sparse_ranks, sparse_scores = self._rank_sparse(query, allowed, pool) if mode != "dense" else ([], {})
 
         fused: Dict[int, float] = {}
         for ranks in (dense_ranks, sparse_ranks):
@@ -229,6 +307,8 @@ class HybridRetriever:
                 document=self.documents[idx], score=score,
                 dense_rank=dense_ranks.index(idx) + 1 if idx in dense_ranks else None,
                 sparse_rank=sparse_ranks.index(idx) + 1 if idx in sparse_ranks else None,
+                dense_score=dense_scores.get(idx),
+                sparse_score=sparse_scores.get(idx),
             ))
         return results
 
@@ -250,17 +330,39 @@ class HybridRetriever:
                 keep.append(i)
         return keep
 
-    def _rank_dense(self, query: str, allowed: Sequence[int], pool: int) -> List[int]:
-        if self._vectors.size == 0:
-            return []
-        scores = self._vectors[list(allowed)] @ self.dense.encode([query])[0]
-        order = np.argsort(-scores)[:pool]
-        return [allowed[i] for i in order]
+    def _rank_dense(self, query: str, allowed: Sequence[int], pool: int) -> tuple[List[int], Dict[int, float]]:
+        if self.store.count() == 0:
+            return [], {}
+        position = {doc.doc_id: i for i, doc in enumerate(self.documents)}
+        hits = self.store.search(self.dense.encode_query(query), pool,
+                                 restrict_to=[self.documents[i].doc_id for i in allowed])
+        ranks = [position[doc_id] for doc_id, _ in hits]
+        return ranks, {position[doc_id]: score for doc_id, score in hits}
 
-    def _rank_sparse(self, query: str, allowed: Sequence[int], pool: int) -> List[int]:
+    def _rank_sparse(self, query: str, allowed: Sequence[int], pool: int) -> tuple[List[int], Dict[int, float]]:
         if self._bm25 is None:
-            return []
-        all_scores = self._bm25.get_scores(tokenize(query))
-        scores = np.asarray([all_scores[i] for i in allowed])
-        order = np.argsort(-scores)[:pool]
-        return [allowed[i] for i in order]
+            return [], {}
+        query_tokens = tokenize(query)
+        all_scores = self._bm25.get_scores(query_tokens)
+        # A document sharing no word with the query is not a lexical match, however it ranks.
+        # Judged by overlap, not by score: in a small corpus a word in exactly half the
+        # documents gets an IDF of zero, so a genuine match can score 0.
+        terms = set(query_tokens)
+        matching = [i for i in allowed if self._token_sets[i] & terms]
+        if not matching:
+            return [], {}
+        scores = np.asarray([all_scores[i] for i in matching])
+        order = np.argsort(-scores, kind="stable")[:pool]
+        ranks = [matching[i] for i in order]
+        return ranks, {matching[i]: float(scores[i]) for i in order}
+
+
+def _content_hash(doc: Document) -> str:
+    """The document's own hash if it carries one, else a hash of its text and metadata."""
+    if doc.metadata.get("content_hash"):
+        return str(doc.metadata["content_hash"])
+    import hashlib
+    import json
+    payload = doc.text + json.dumps({k: v for k, v in doc.metadata.items() if k != "content_hash"},
+                                    sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

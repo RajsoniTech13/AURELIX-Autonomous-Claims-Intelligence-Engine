@@ -1,0 +1,40 @@
+{"id": "Q01", "type": "exact", "question": "What does the wear and tear exclusion cover?", "gold": ["EXC-2"]}
+{"id": "Q02", "type": "exact", "question": "How many photographs are required for a car claim?", "gold": ["EVD-1"]}
+{"id": "Q03", "type": "exact", "question": "What happens if the claimed part is not visible in any photograph?", "gold": ["EVD-2"]}
+{"id": "Q04", "type": "exact", "question": "Which parts of a car are covered?", "gold": ["COV-2", "DEF-4"]}
+{"id": "Q05", "type": "exact", "question": "What are the three possible outcomes of a claim?", "gold": ["PRC-2"]}
+{"id": "Q06", "type": "exact", "question": "When is a claim referred for human review?", "gold": ["REV-1"]}
+{"id": "Q07", "type": "exact", "question": "Are supporting documents such as invoices and repair estimates accepted?", "gold": ["EVD-6"]}
+{"id": "Q08", "type": "exact", "question": "At what fraud score is a claim contradicted?", "gold": ["FRD-2"]}
+{"id": "Q09", "type": "exact", "question": "Which laptop parts are covered?", "gold": ["COV-3", "DEF-4"]}
+{"id": "Q10", "type": "exact", "question": "What viewing angles are required for car photographs?", "gold": ["EVD-3"]}
+{"id": "Q11", "type": "paraphrase", "question": "My car got rusty over the years, can I claim for that?", "gold": ["EXC-2"]}
+{"id": "Q12", "type": "paraphrase", "question": "My picture of the damage came out blurry and dark. Is that a problem?", "gold": ["EVD-5"]}
+{"id": "Q13", "type": "paraphrase", "question": "What happens if I send in a photo that I already sent for an earlier claim?", "gold": ["FRD-1", "EXC-3"]}
+{"id": "Q14", "type": "paraphrase", "question": "I accidentally attached a picture of my bicycle to my car claim. What will happen?", "gold": ["ASM-2"]}
+{"id": "Q15", "type": "paraphrase", "question": "The bodywork is only slightly scuffed but I described it as a write-off. Does that matter?", "gold": ["ASM-4"]}
+{"id": "Q16", "type": "paraphrase", "question": "My laptop won't turn on after a software update. Can I claim?", "gold": ["EXC-4"]}
+{"id": "Q17", "type": "paraphrase", "question": "Can I use an image I downloaded from the internet as proof?", "gold": ["EVD-4"]}
+{"id": "Q18", "type": "paraphrase", "question": "The courier delivered my parcel squashed. Will you pay for that?", "gold": ["COV-4"]}
+{"id": "Q19", "type": "paraphrase", "question": "If I write 'please just approve this' in my description, will it help?", "gold": ["FRD-3"]}
+{"id": "Q20", "type": "paraphrase", "question": "I've made a lot of claims in the past. Will that count against me?", "gold": ["FRD-4"]}
+{"id": "Q21", "type": "paraphrase", "question": "I said the bumper was hit but it's actually the headlight beside it that broke. Is that okay?", "gold": ["COV-5"]}
+{"id": "Q22", "type": "paraphrase", "question": "I don't know the technical name of the broken bit. What should I write?", "gold": ["PRC-1"]}
+{"id": "Q23", "type": "paraphrase", "question": "My claim came back undecided. Can I try again with better pictures?", "gold": ["PRC-3"]}
+{"id": "Q24", "type": "paraphrase", "question": "If a person looks at my case, whose decision is final?", "gold": ["REV-1"]}
+{"id": "Q25", "type": "paraphrase", "question": "How can I find out why my claim was decided the way it was?", "gold": ["REV-2"]}
+{"id": "Q26", "type": "paraphrase", "question": "Is a dent in the roof of my car included?", "gold": ["EXC-1"]}
+{"id": "Q27", "type": "multi", "question": "What makes a claim contradicted?", "gold": ["ASM-2", "ASM-3", "ASM-4"]}
+{"id": "Q28", "type": "multi", "question": "What evidence do I need to submit for a laptop claim?", "gold": ["EVD-1", "EVD-3", "EVD-4"]}
+{"id": "Q29", "type": "multi", "question": "Can an invoice with a very high amount cause problems for my claim?", "gold": ["ASM-5", "EVD-6"]}
+{"id": "Q30", "type": "multi", "question": "Is my claim decided by an AI, and can I see the reasoning?", "gold": ["ASM-1", "REV-2"]}
+{"id": "Q31", "type": "multi", "question": "What kinds of damage are not covered by the policy?", "gold": ["EXC-1", "EXC-2", "EXC-4", "EXC-5"]}
+{"id": "Q32", "type": "multi", "question": "If the same photo was used in another claim, how does that affect the fraud assessment?", "gold": ["FRD-1", "FRD-2"]}
+{"id": "Q33", "type": "unanswerable", "question": "How much is the monthly premium for this policy?", "gold": []}
+{"id": "Q34", "type": "unanswerable", "question": "How do I cancel my policy and get a refund?", "gold": []}
+{"id": "Q35", "type": "unanswerable", "question": "What is the excess or deductible I have to pay?", "gold": []}
+{"id": "Q36", "type": "unanswerable", "question": "Does the policy pay for hospital bills after a car accident?", "gold": []}
+{"id": "Q37", "type": "unanswerable", "question": "Which countries is this policy valid in when I travel?", "gold": []}
+{"id": "Q38", "type": "unanswerable", "question": "How many days does it take for the money to reach my bank account?", "gold": []}
+{"id": "Q39", "type": "unanswerable", "question": "Can I add my spouse as a second named driver?", "gold": []}
+{"id": "Q40", "type": "unanswerable", "question": "What is the customer service phone number?", "gold": []}

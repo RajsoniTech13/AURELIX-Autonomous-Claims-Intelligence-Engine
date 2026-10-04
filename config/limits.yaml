@@ -156,3 +156,18 @@ text_providers:
   anthropic:
     api_key_env: ANTHROPIC_API_KEY
     timeout_seconds: 60
+
+# ─── Per-account rate limits (Phase 7, A3) ──────────────────────────────────
+# Enforced per signed-in account (and per client address for sign-in attempts), in
+# platform_backend/services/rate_limit.py. Separate from demo_guard, which rations the shared
+# Gemini budget per visitor per day: these stop one account from scripting an endpoint.
+# 0 disables a limit.
+rate_limits:
+  claim_submissions_per_hour: 12
+  copilot_questions_per_hour: 30
+  # Failed password sign-ins per username per 15 minutes. Brute force needs many guesses;
+  # a person who forgot their password needs a few.
+  failed_logins_per_15_minutes: 5
+  # Demo accounts created per client address per hour, so the demo login cannot be used to
+  # fill the users table.
+  demo_logins_per_hour: 20

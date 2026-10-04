@@ -284,18 +284,41 @@ def test_recall_at_5_on_a_labelled_probe_set(retriever):
     assert hits == len(probes), f"recall@5 = {hits}/{len(probes)}"
 
 
-def test_the_gemini_backend_refuses_rather_than_silently_spending_quota():
+def test_the_gemini_backend_refuses_rather_than_silently_spending_quota(monkeypatch):
     """
-    It must fail loudly. A dense backend that quietly starts making paid API calls is a
-    billing incident, and this project has one hard constraint.
+    It must fail loudly. A dense backend that quietly starts spending the demo's daily
+    request budget is an outage waiting to happen, and this project has one hard constraint.
+
+    Phase 7 implemented the backend, so the refusal moved from "not implemented" to "not
+    authorised": without AURELIX_ALLOW_GEMINI_EMBEDDINGS it raises before any request.
     """
-    with pytest.raises(NotImplementedError, match="quota"):
-        GeminiEmbeddingBackend().fit(["anything"])
+    from agent_core.retrieval.embeddings import QuotaNotAuthorised
+
+    class NeverCalled:
+        class models:
+            @staticmethod
+            def embed_content(**_):
+                raise AssertionError("a request was made without authorisation")
+
+    monkeypatch.delenv("AURELIX_ALLOW_GEMINI_EMBEDDINGS", raising=False)
+    backend = GeminiEmbeddingBackend(client=NeverCalled())
+    with pytest.raises(QuotaNotAuthorised, match="quota"):
+        backend.encode(["anything"])
+    with pytest.raises(QuotaNotAuthorised):
+        backend.encode_query("anything")
 
 
-def test_an_unknown_backend_is_rejected_at_construction():
+def test_an_unknown_backend_is_rejected_at_construction(monkeypatch):
+    monkeypatch.delenv("AURELIX_DENSE_BACKEND", raising=False)
     with pytest.raises(ValueError, match="unknown dense backend"):
         HybridRetriever({"dense": {"backend": "wishful-thinking"}})
+
+
+def test_an_unknown_backend_override_is_rejected_too(monkeypatch):
+    """The operational override is validated like the config: a typo must not pass silently."""
+    monkeypatch.setenv("AURELIX_DENSE_BACKEND", "lssa")
+    with pytest.raises(ValueError, match="unknown dense backend"):
+        HybridRetriever({"dense": {"backend": "lsa"}})
 
 
 # ─── R030 end to end ────────────────────────────────────────────────────────

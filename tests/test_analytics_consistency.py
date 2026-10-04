@@ -12,6 +12,8 @@ defaulted, so no existing consumer changes, and it uses exactly the predicate `/
 """
 from __future__ import annotations
 
+from tests.auth_helpers import auth_headers
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -48,7 +50,7 @@ def client(tmp_path, monkeypatch):
             db.close()
 
     app.dependency_overrides[session_module.get_db] = _override
-    with TestClient(app) as c:
+    with TestClient(app, headers=auth_headers("reviewer")) as c:
         c.SessionLocal = Testing  # type: ignore[attr-defined]
         yield c
     app.dependency_overrides.clear()

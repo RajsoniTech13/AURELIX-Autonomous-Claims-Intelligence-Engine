@@ -70,16 +70,50 @@ hybrid:
   candidates_per_arm: 20
 
   dense:
-    # Latent semantic indexing over TF-IDF: a truncated SVD, computed with numpy.
-    # This is a genuine dense arm -- it retrieves on co-occurrence rather than exact
-    # term overlap -- but it is NOT a transformer embedding, and it should not be
-    # described as one. A Gemini-embedding backend implements the same interface and
-    # is left switched off: it would spend request quota, which the brief forbids
-    # without explicit approval.
-    backend: lsa
+    # A real sentence-embedding model, run locally on CPU by fastembed. Chosen by measurement
+    # on evaluation/rag/golden.jsonl (python -m agent_core.evaluation.evaluate_rag):
+    #
+    #                        recall@5   MRR    nDCG@5   not-found (leave-one-out)
+    #   hybrid, LSA            0.818    0.688   0.687    0.775
+    #   hybrid, bge-small      0.961    0.885   0.889    0.925
+    #   + cross-encoder        0.906    0.927   0.885    0.825   (42 ms/query, +160 MB)
+    #
+    # The reranker raised MRR slightly but lowered recall, nDCG and not-found accuracy, so it
+    # is not used. The bge query instruction prefix raised dense-only recall@5 but lowered
+    # not-found accuracy (0.875), so it is off.
+    #
+    # Memory, measured with the whole API loaded: 112 MB without the model, 287 MB with it
+    # when only questions are embedded. Embedding the corpus inside the server would add
+    # ~139 MB more, so clause vectors are built offline by tools/build_index and the server
+    # refuses to embed documents (it falls back to LSA instead — see HybridRetriever.index).
+    #
+    # `backend: lsa` restores the previous behaviour: no model download, no extra memory.
+    backend: fastembed
+    model: BAAI/bge-small-en-v1.5
+    query_prefix: ""
+    threads: 1          # Render's free instance has a fraction of one CPU
+    # Used only by `backend: lsa`, and by the fallback when the model cannot be loaded.
     components: 64
     min_df: 1
 
   # Never compare a laptop claim against a car claim, however similar the wording.
   # Applied before scoring, not as a post-filter, so the top-k is k useful results.
   metadata_filters: [object_category]
+
+# ── Policy Copilot ──────────────────────────────────────────────────────────
+# Retrieval for POST /api/v1/copilot/ask. Reads only the operator's policy clauses
+# (`kind: clause` in the policy_rules collection) — never claim text from other claimants.
+copilot:
+  top_k: 5
+  # The zero-cost "not in the policy" gate: if the best clause's cosine similarity is below
+  # this, no model is called. Measured on the golden set with bge-small: the lowest-scoring
+  # answerable question is 0.604, the highest unanswerable 0.633 — the two overlap. The gate
+  # sits just under every answerable question, because refusing a real question is the worse
+  # error; borderline unanswerable questions pass through, and the model's own `not_found`
+  # answer handles them. Tuned on the same 40 questions it is evaluated on, so re-measure
+  # when the policy or the questions change.
+  min_dense_score:
+    fastembed: 0.60
+    # LSA cannot separate answerable from unanswerable questions (it accepted all 8 in the
+    # evaluation), so with LSA there is no gate and the model decides.
+    lsa: null

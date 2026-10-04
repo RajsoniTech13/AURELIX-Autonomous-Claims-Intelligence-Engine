@@ -1,17 +1,7 @@
-/**
- * The one place that knows where the backend lives.
- *
- * This was a hardcoded `http://127.0.0.1:8000`, which means the deployed frontend called
- * the reviewer's own laptop — a build that compiles, deploys, and is broken for everyone
- * but the person who built it.
- *
- * `NEXT_PUBLIC_` is required: the fetches below run in the browser, and anything without
- * that prefix is stripped from the client bundle at build time. It is also **baked in at
- * build time**, not read at runtime, so changing it on Vercel requires a redeploy.
- */
-export const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
-).replace(/\/+$/, "");
+import { API_URL } from "@/lib/config";
+import { accessTokenFor, refreshSession, sessionRejected } from "@/lib/auth";
+
+export { API_URL };
 
 /** Absolute URL for a stored claim photograph (`image_paths` holds `uploads/<id>.jpg`). */
 export function assetUrl(path: string): string {
@@ -47,9 +37,20 @@ async function errorFrom(res: Response, fallback: string): Promise<Error> {
  * likely causes turns a dead-end error message into a next step.
  */
 async function call(path: string, init?: RequestInit): Promise<Response> {
+  const send = async () => {
+    const token = await accessTokenFor();
+    const headers = new Headers(init?.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(`${API_URL}${path}`, { ...init, headers });
+  };
+
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, init);
+    res = await send();
+    // The token looked valid here but the server refused it (a restart rotated the signing
+    // key, or the session was revoked): refresh once and retry, then give up and sign out.
+    if (res.status === 401 && (await refreshSession())) res = await send();
+    if (res.status === 401) sessionRejected();
   } catch {
     throw new Error(
       `Cannot reach the analysis API at ${API_URL}. It may be starting up ` +
@@ -165,5 +166,27 @@ export async function getHealth() {
 export async function getLlmMetrics(days = 7) {
   const res = await call(`/api/v1/metrics/llm?days=${days}`);
   if (!res.ok) throw await errorFrom(res, "Failed to fetch model usage");
+  return res.json();
+}
+
+/**
+ * Ask the Policy Copilot a question about the policy. The answer cites clauses, and every
+ * citation is a clause the server actually retrieved; `status` is `answered`, `not_found`
+ * or `model_unavailable`.
+ */
+export async function askCopilot(question: string) {
+  const res = await call(`/api/v1/copilot/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw await errorFrom(res, "The copilot could not answer");
+  return res.json();
+}
+
+/** The rule that decided a claim and the policy clauses behind it. No model call. */
+export async function getExplanation(claimId: number) {
+  const res = await call(`/api/v1/claims/${claimId}/explanation`);
+  if (!res.ok) throw await errorFrom(res, "Failed to load the policy basis");
   return res.json();
 }

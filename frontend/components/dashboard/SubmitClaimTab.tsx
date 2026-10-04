@@ -29,7 +29,10 @@ const INITIAL_STAGES: PipelineStages = {
 export function SubmitClaimTab({
   onClaimSubmitted,
   onNavigate,
+  user,
 }: {
+  /** The signed-in account. A claimant always submits as themselves. */
+  user?: { username: string; role: string } | null;
   onClaimSubmitted: (claim: any) => void;
   onNavigate?: (tab: string) => void;
 }) {
@@ -40,7 +43,10 @@ export function SubmitClaimTab({
   const [startTime, setStartTime] = useState<number | null>(null);
   const [claimResult, setClaimResult] = useState<any>(null);
   
-  const [userId, setUserId] = useState("user_002");
+  // A claimant files as themselves; the API ignores any other id from a claimant anyway, so
+  // the field is shown read-only rather than offering an edit that would be silently dropped.
+  const claimantOnly = user?.role === "claimant";
+  const [userId, setUserId] = useState(claimantOnly && user ? user.username : "user_002");
   const [claimObject, setClaimObject] = useState("car");
   const [userClaim, setUserClaim] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -226,6 +232,7 @@ export function SubmitClaimTab({
                   <label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Policyholder ID</label>
                   <Input 
                     value={userId} 
+                    readOnly={claimantOnly}
                     onChange={e => setUserId(e.target.value)} 
                     className="max-w-sm bg-background border-border/50 focus-visible:ring-primary h-10"
                   />

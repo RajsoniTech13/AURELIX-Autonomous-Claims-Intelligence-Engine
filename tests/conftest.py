@@ -94,3 +94,27 @@ def _no_leaked_telemetry_listeners():
     module = sys.modules.get("platform_backend.services.llm_telemetry")
     if module is not None:
         module._unsubscribe = None
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_dense_backend(monkeypatch):
+    """
+    The configured dense backend is a local embedding model that downloads 67 MB on first
+    use. A test suite must not depend on the network, so every test uses LSA unless it
+    injects its own embedder. Tests that exercise the real model opt in explicitly and skip
+    when the model is not already on disk.
+    """
+    monkeypatch.setenv("AURELIX_DENSE_BACKEND", "lsa")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """
+    Rate-limit windows are process-global, and every test submits as the same test account,
+    so without a reset the thirteenth submission in the suite is refused with a 429 no
+    matter which test makes it.
+    """
+    from platform_backend.services import rate_limit
+    rate_limit.window.reset()
+    yield
+    rate_limit.window.reset()

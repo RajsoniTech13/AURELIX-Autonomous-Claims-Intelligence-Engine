@@ -20,13 +20,20 @@ import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from platform_backend.db.models import Claim, Job
 from platform_backend.db.session import get_db
+from platform_backend.security import (
+    current_principal, ensure_can_read, require_reviewer, submitter_id,
+)
+from platform_backend.services import demo_guard
 from platform_backend.services import jobs as job_service
+from platform_backend.services.auth import Principal
+from platform_backend.services.rate_limit import enforce
 from platform_backend.services.claim_service import utc_iso
 from platform_backend.services.uploads import read_documents, read_uploads
 
@@ -59,14 +66,16 @@ def _job_view(job: Job) -> Dict[str, Any]:
 
 @router.post("/claims", status_code=202)
 async def submit_claim(
+    request: Request,
     response: Response,
-    user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
+    user_id: Optional[str] = Form(None),
     files: List[UploadFile] = File([]),
     documents: List[UploadFile] = File([]),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
+    principal: Principal = Depends(current_principal),
 ):
     """
     Accept a claim for analysis. Returns 202 immediately; the work happens on a job.
@@ -76,6 +85,7 @@ async def submit_claim(
     asynchronously for a reason the submitter never sees. Caps and content sniffing live in
     `services/uploads`, shared with the unversioned route.
     """
+    user_id = submitter_id(principal, user_id)
     if idempotency_key:
         existing = job_service.find_by_idempotency_key(db, user_id, idempotency_key)
         if existing is not None:
@@ -85,12 +95,18 @@ async def submit_claim(
                 media_type="application/json", status_code=200,
             )
 
+    # The same limits as the dashboard route. This route used to skip the demo capacity
+    # guard entirely, which made the per-visitor cap trivially avoidable.
+    from platform_backend.api.routes import _submission_checks
+    visitor = _submission_checks(request, principal)
+
     images, image_paths = await read_uploads(files)
     # Accepted here for the same reason images are: a malformed upload should fail
     # fast with a 400 the submitter can act on, not become a job that fails
     # asynchronously. Without this the route accepted `documents` and silently
     # discarded them — an API that drops evidence is worse than one that refuses it.
     doc_parts, document_paths = await read_documents(documents)
+    demo_guard.consume(visitor)
 
     payload = {
         "user_id": user_id, "user_claim": user_claim, "claim_object": claim_object,
@@ -106,15 +122,18 @@ async def submit_claim(
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)):
+def get_job(job_id: str, db: Session = Depends(get_db),
+            principal: Principal = Depends(current_principal)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    ensure_can_read(principal, job.user_id, "Job")
     return _job_view(job)
 
 
 @router.get("/jobs/{job_id}/stream")
-async def stream_job(job_id: str, db: Session = Depends(get_db)):
+async def stream_job(job_id: str, db: Session = Depends(get_db),
+                     principal: Principal = Depends(current_principal)):
     """
     Server-sent per-stage progress until the job reaches a terminal state.
 
@@ -122,8 +141,10 @@ async def stream_job(job_id: str, db: Session = Depends(get_db)):
     has to survive a client reconnecting mid-analysis, which means it has to be durable
     anyway, which means the database is already where it belongs.
     """
-    if db.query(Job).filter(Job.id == job_id).first() is None:
+    owner = db.query(Job).filter(Job.id == job_id).first()
+    if owner is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    ensure_can_read(principal, owner.user_id, "Job")
 
     async def events():
         seen: Optional[str] = None
@@ -168,24 +189,87 @@ async def stream_job(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/claims/{claim_id}")
-def get_claim(claim_id: int, db: Session = Depends(get_db)):
+def get_claim(claim_id: int, db: Session = Depends(get_db),
+              principal: Principal = Depends(current_principal)):
+    from platform_backend.api.routes import claim_detail
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if claim is None:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return claim
+    ensure_can_read(principal, claim.user_id)
+    return claim_detail(claim)
 
 
 @router.get("/metrics/llm")
-def llm_metrics(days: int = 7, db: Session = Depends(get_db)):
+def llm_metrics(days: int = 7, db: Session = Depends(get_db),
+                principal: Principal = Depends(require_reviewer)):
     """
     Model usage over the last `days` (1–90): calls per day, p50/p95 latency, list-price cost
     per claim, cache-hit rate, and today's remaining Gemini quota per model.
 
     Computed from the `llm_calls` table and the quota ledger — nothing here is estimated.
-    Restricted to reviewer and admin roles once authentication lands (Phase 7 A3).
+    Reviewer and admin only.
     """
     from platform_backend.services.llm_telemetry import summarise
     return summarise(db, days=days)
+
+
+class CopilotQuestion(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/copilot/ask")
+def copilot_ask(body: CopilotQuestion, request: Request,
+                principal: Principal = Depends(require_reviewer)):
+    """
+    Answer a question about the policy, citing the clauses the answer rests on.
+
+    Retrieval reads only the policy wording. When no clause is close enough the answer is
+    "not in the policy" and no model is called. Every citation in the response is a clause
+    that was actually retrieved, returned with its text so the reviewer can read it.
+    """
+    from agent_core.copilot import ask
+
+    # Each question can spend a free-tier model call; one account must not be able to spend
+    # the day's budget for everyone.
+    enforce(f"copilot:{principal.user_id}", "copilot_questions_per_hour", 3600, "copilot questions")
+    bundle = getattr(request.app.state, "index", None)
+    if bundle is None or not bundle.policy_clauses():
+        raise HTTPException(status_code=503, detail=(
+            "The policy index is not built. Run `python -m agent_core.tools.build_index`."))
+    try:
+        return ask(body.question, bundle).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/claims/{claim_id}/explanation")
+def claim_explanation(claim_id: int, db: Session = Depends(get_db),
+                      principal: Principal = Depends(current_principal)):
+    """
+    The rule that decided this claim, and the policy clauses behind it. Deterministic: read
+    from the claim's own audit trail and `knowledge/policies/rule_clause_map.yaml`, with no
+    model call.
+    """
+    from agent_core.explanation import explain
+
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if claim is None:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    # A claimant may read the explanation of their own claim: the policy promises a
+    # right to an explanation (REV-2), and that right is the claimant's.
+    ensure_can_read(principal, claim.user_id)
+    logs = {log.agent_name: (log.outputs or {}) for log in claim.audit_logs}
+    return {
+        "claim_id": claim.id,
+        **explain(
+            claim_status=claim.claim_status,
+            claim_object=claim.claim_object,
+            decision_rule_ids=logs.get("decision", {}).get("rule_ids") or [],
+            policy_rule_ids=logs.get("policy_verification", {}).get("rule_ids") or [],
+            justification=claim.claim_status_justification or "",
+            escalated=bool(claim.manual_review_required),
+        ),
+    }
 
 
 @router.get("/claims")
@@ -194,6 +278,7 @@ def list_claims(
     limit: int = 50,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
+    principal: Principal = Depends(current_principal),
 ):
     """
     Cursor pagination on the primary key.
@@ -204,6 +289,8 @@ def list_claims(
     """
     limit = max(1, min(limit, 200))
     query = db.query(Claim)
+    if not principal.is_reviewer:
+        query = query.filter(Claim.user_id == principal.username)
     if status:
         query = query.filter(Claim.claim_status == status)
     if after is not None:
