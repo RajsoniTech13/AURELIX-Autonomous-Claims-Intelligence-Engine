@@ -10,8 +10,8 @@ import { signIn, signInDemo } from "@/lib/auth";
  *
  * For the public demo the main path is one click: "Explore as a claimant" creates a fresh
  * claimant account for this visitor alone, so their claims are invisible to everyone else;
- * "Explore as a reviewer" opens the reviewer workspace. Accounts with a password are seeded
- * by the operator and signed into below.
+ * "Explore as a reviewer" opens the reviewer workspace. Password accounts are seeded by the
+ * operator; their form is shown only when demo sign-in is switched off.
  *
  * The API runs on a free instance that sleeps when idle, so the first request after a quiet
  * spell can take ~50 seconds. The screen says so, instead of looking broken while it waits.
@@ -111,12 +111,15 @@ export function SignIn() {
             </div>
           )}
 
-          {config && (
+          {/* The password form is for operator-seeded accounts. While the one-click demo is
+              on, visitors have no account, so offering it only looks like a wall; it appears
+              when demo sign-in is switched off (AURELIX_DEMO_LOGIN=0), so there is always a
+              way in. */}
+          {config && !config.demo_login && (
             <form
               onSubmit={(e) => { e.preventDefault(); run("password", () => signIn(username.trim(), password)); }}
-              className={`space-y-2.5 ${config.demo_login ? "pt-4 border-t border-line" : ""}`}
+              className="space-y-2.5"
             >
-              {config.demo_login && <div className="label-meta">Or sign in with an account</div>}
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
