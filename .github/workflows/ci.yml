@@ -1,0 +1,101 @@
+# AURELIX — continuous integration.
+#
+# Four jobs, each answering one question about a change:
+#   tests     does everything still work?            (hermetic: no network, no API keys)
+#   evals     did accuracy or retrieval get worse?   (re-scored offline; zero API calls)
+#   security  does a dependency have a known CVE?
+#   frontend  does the UI lint, type-check and build?
+#
+# No secret is used anywhere: nothing here can spend model quota.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"   # what Render runs (render.yaml)
+
+jobs:
+  tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-optional.txt
+      # The optional Anthropic SDK is installed here so its adapter tests run rather than skip.
+      - run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-optional.txt
+      - run: python -m pytest
+
+  evals:
+    name: Offline evaluation gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install -r requirements.txt
+      # Claim verdicts re-derived from stored perception. Measured 95.0% macro-F1; the gate
+      # fails on a drop of more than two points.
+      - name: Synthetic benchmark (macro-F1 floor 0.93)
+        run: python -m agent_core.evaluation.evaluate_synthetic --min-macro-f1 0.93
+      # The embedding model is a 67 MB public download; cache it between runs.
+      - uses: actions/cache@v6
+        with:
+          path: .aurelix/models
+          key: fastembed-bge-small-en-v1.5
+      # Retrieval for the Policy Copilot on the 40-question golden set. Measured recall@5
+      # 0.961 for the shipped hybrid configuration; the gate fails below 0.90.
+      - name: Policy retrieval (recall@5 floor 0.90)
+        run: python -m agent_core.evaluation.evaluate_rag --no-memory --no-report --min-recall5 0.90
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pip-audit==2.10.1
+      - run: pip-audit -r requirements.txt --progress-spinner off
+
+  frontend:
+    name: Frontend lint, type-check, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build

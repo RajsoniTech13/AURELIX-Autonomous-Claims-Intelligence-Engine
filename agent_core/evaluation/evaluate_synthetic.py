@@ -14,7 +14,7 @@ import csv
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 CLASSES = ("supported", "contradicted", "not_enough_information")
 
@@ -27,6 +27,54 @@ def load_ground_truth(path: Path) -> Dict[str, Dict[str, str]]:
 def load_predictions(results_json: Path) -> Dict[str, Dict[str, Any]]:
     data = json.loads(results_json.read_text(encoding="utf-8"))
     return {r["claim_id"]: r for r in data}
+
+
+def score(pairs: Sequence[Tuple[str, str]]) -> Tuple[float, float]:
+    """
+    (accuracy, macro-F1) for a list of (expected, predicted) labels.
+
+    One definition, used by the headline and by every bootstrap resample, so the interval
+    is around exactly the number reported. Macro-F1 averages all three classes, and a class
+    with no true or predicted cases in a sample scores F1 = 0 for it — the same rule the
+    headline uses.
+    """
+    n = len(pairs)
+    if not n:
+        return 0.0, 0.0
+    accuracy = sum(e == g for e, g in pairs) / n
+    f1s = []
+    for c in CLASSES:
+        tp = sum(e == c and g == c for e, g in pairs)
+        fp = sum(e != c and g == c for e, g in pairs)
+        fn = sum(e == c and g != c for e, g in pairs)
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
+        rec = tp / (tp + fn) if (tp + fn) else 0.0
+        f1s.append(2 * prec * rec / (prec + rec) if (prec + rec) else 0.0)
+    return accuracy, sum(f1s) / len(CLASSES)
+
+
+def bootstrap_ci(pairs: Sequence[Tuple[str, str]], resamples: int = 10_000, seed: int = 7,
+                 level: float = 0.95) -> Dict[str, Any]:
+    """
+    Percentile bootstrap: resample the 44 cases with replacement, re-score, and read the
+    2.5th and 97.5th percentiles. It answers "how much would these numbers move on another
+    44 cases like these?" — not "how would this do on real photographs", which no amount
+    of resampling synthetic data can answer. Seeded, so the report is reproducible.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    n = len(pairs)
+    acc, f1 = np.empty(resamples), np.empty(resamples)
+    for i in range(resamples):
+        sample = [pairs[j] for j in rng.integers(0, n, n)]
+        acc[i], f1[i] = score(sample)
+    lo, hi = (1 - level) / 2 * 100, (1 + level) / 2 * 100
+    return {
+        "accuracy": (float(np.percentile(acc, lo)), float(np.percentile(acc, hi))),
+        "macro_f1": (float(np.percentile(f1, lo)), float(np.percentile(f1, hi))),
+        "resamples": resamples, "seed": seed, "level": level,
+    }
 
 
 def evaluate(gt_path: Path, results_path: Path, report_path: Path) -> Dict[str, Any]:
@@ -80,6 +128,8 @@ def evaluate(gt_path: Path, results_path: Path, report_path: Path) -> Dict[str, 
                         "precision": prec, "recall": rec, "f1": f1}
 
     macro_f1 = sum(m["f1"] for m in per_class.values()) / len(CLASSES)
+    pairs = [(g["expected_status"], p["verdict"]["claim_status"]) for _, g, p in scored]
+    assert abs(score(pairs)[1] - macro_f1) < 1e-12, "score() must agree with the headline"
     weighted_f1 = (
         sum(m["f1"] * m["support"] for m in per_class.values()) / n if n else 0.0
     )
@@ -95,6 +145,7 @@ def evaluate(gt_path: Path, results_path: Path, report_path: Path) -> Dict[str, 
         "unscored": [(c, e) for c, _, e in unscored],
         "confidence": [p["verdict"]["confidence"] for _, _, p in scored],
         "fraud": [p["verdict"]["fraud_score"] for _, _, p in scored],
+        "ci": bootstrap_ci(pairs) if pairs else None,
     }
     _write(report_path, metrics, gt_path, results_path)
     return metrics
@@ -112,21 +163,32 @@ def _write(path: Path, m: Dict[str, Any], gt_path: Path, results_path: Path) -> 
     A("> claim photographs, which bring lighting, occlusion, reflections and motion blur")
     A("> that this set does not contain.")
     A("")
-    A(f"- Ground truth: `{gt_path}`")
-    A(f"- Predictions: `{results_path}`")
+    A(f"- Ground truth: `{_relative(gt_path)}`")
+    A(f"- Predictions: `{_relative(results_path)}`")
     A("")
     A("## Headline")
     A("")
-    A("| metric | value |")
-    A("| :--- | ---: |")
-    A(f"| Cases scored | {m['n_scored']} / {m['n_total']} |")
-    A(f"| **Accuracy** | **{m['accuracy']:.1%}** |")
-    A(f"| Macro F1 | {m['macro_f1']:.1%} |")
-    A(f"| Weighted F1 | {m['weighted_f1']:.1%} |")
+    ci = m.get("ci") or {}
+    def interval(key: str) -> str:
+        lo_hi = ci.get(key)
+        return f"{lo_hi[0]:.1%} – {lo_hi[1]:.1%}" if lo_hi else "—"
+
+    A("| metric | value | 95% bootstrap interval |")
+    A("| :--- | ---: | ---: |")
+    A(f"| Cases scored | {m['n_scored']} / {m['n_total']} | |")
+    A(f"| **Accuracy** | **{m['accuracy']:.1%}** | {interval('accuracy')} |")
+    A(f"| Macro F1 | {m['macro_f1']:.1%} | {interval('macro_f1')} |")
+    A(f"| Weighted F1 | {m['weighted_f1']:.1%} | |")
     if m["confidence"]:
-        A(f"| Mean confidence | {sum(m['confidence']) / len(m['confidence']):.0f} |")
-        A(f"| Mean fraud score | {sum(m['fraud']) / len(m['fraud']):.0f} |")
+        A(f"| Mean confidence | {sum(m['confidence']) / len(m['confidence']):.0f} | |")
+        A(f"| Mean fraud score | {sum(m['fraud']) / len(m['fraud']):.0f} | |")
     A("")
+    if ci:
+        A(f"The intervals are a percentile bootstrap: {ci['resamples']:,} resamples of the "
+          f"{m['n_scored']} cases with replacement, seed {ci['seed']}. With only "
+          f"{m['n_scored']} cases they are wide, and they describe variation between sets of "
+          f"*synthetic* cases like these — not accuracy on real photographs.")
+        A("")
     if m["n_unscored"]:
         A(f"> {m['n_unscored']} case(s) produced no usable prediction and are excluded from")
         A("> every figure above. They are listed at the end.")
@@ -188,18 +250,42 @@ def _write(path: Path, m: Dict[str, Any], gt_path: Path, results_path: Path) -> 
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
 
 
-def main() -> None:
-    root = Path(__file__).resolve().parents[2]
+_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _relative(path: Path) -> str:
+    """Repo-relative, so the committed report does not embed one machine's home directory."""
+    try:
+        return str(Path(path).resolve().relative_to(_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    import argparse
+    p = argparse.ArgumentParser(description="Re-score stored perception (no API calls)")
+    p.add_argument("--min-macro-f1", type=float, default=None,
+                   help="exit 1 if macro-F1 is below this (a CI regression gate)")
+    args = p.parse_args(argv)
+
     m = evaluate(
-        root / "agent_core/data/synthetic/ground_truth.csv",
-        root / "agent_core/output/results_detail.json",
-        root / "agent_core/output/evaluation_report.md",
+        _ROOT / "agent_core/data/synthetic/ground_truth.csv",
+        _ROOT / "agent_core/output/results_detail.json",
+        _ROOT / "agent_core/output/evaluation_report.md",
     )
     print(f"Scored {m['n_scored']}/{m['n_total']}  accuracy {m['accuracy']:.1%}  "
           f"macro-F1 {m['macro_f1']:.1%}")
+    if m.get("ci"):
+        ci = m["ci"]
+        print(f"  95% bootstrap: accuracy {ci['accuracy'][0]:.1%}–{ci['accuracy'][1]:.1%}  "
+              f"macro-F1 {ci['macro_f1'][0]:.1%}–{ci['macro_f1'][1]:.1%}  ({ci['resamples']:,} resamples)")
     for cat, (ok, tot) in m["by_category"].items():
         print(f"  {cat:26s} {ok}/{tot}")
+    if args.min_macro_f1 is not None and m["macro_f1"] < args.min_macro_f1:
+        print(f"FAIL: macro-F1 {m['macro_f1']:.4f} is below the floor {args.min_macro_f1:.4f}")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

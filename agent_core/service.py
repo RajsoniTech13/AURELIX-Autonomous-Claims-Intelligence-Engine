@@ -46,6 +46,7 @@ from agent_core.agents.policy_verification import run_policy_verification_agent
 from agent_core.agents.user_risk import run_user_risk_agent
 from agent_core.llm import telemetry
 from agent_core.prompts.batch_perception import BATCH_SYSTEM_PROMPT
+from agent_core.prompts.templates import detect_injection
 from agent_core.retrieval.image_index import DuplicateMatch, ImageIndex, indexable
 from agent_core.rules_engine import Verdict, decide, effective_quality
 from agent_core.schemas.contract import (
@@ -124,13 +125,25 @@ def judge(entry: Dict[str, Any]) -> Dict[str, Any]:
     evidence_notes = [m.describe() for m in entry.get("duplicate_matches") or []]
     evidence_notes.extend(documents.notes)
 
+    # A second, deterministic injection check alongside the model's own
+    # `instruction_like_text_present`. Defence in depth: a model can miss an injection, and
+    # this regex costs nothing and cannot be talked out of what it sees.
+    #
+    # It is a *risk signal only*. It adds the `text_instruction_present` flag, which routes the
+    # claim to a human reviewer — and nothing else: it does not touch the fraud score (that
+    # stays tied to the model's report, FRD-3) and cannot change a verdict, because a claimant
+    # writing "please approve this" is not evidence about their bumper.
+    extra_flags = list(getattr(entry.get("validation"), "risk_flags", []) or [])
+    if detect_injection(row.get("user_claim", "")) and "text_instruction_present" not in extra_flags:
+        extra_flags.append("text_instruction_present")
+
     verdict = decide(
         alignment, perception,
         no_usable_image=entry.get("no_usable_image", False),
         perception_failed=entry.get("perception_failed", False),
         duplicate_image_reuse=entry.get("duplicate_image_reuse", False),
         user_history_risk=entry.get("user_history_risk", False),
-        extra_risk_flags=list(getattr(entry.get("validation"), "risk_flags", []) or []),
+        extra_risk_flags=extra_flags,
         preflight_quality=quality,
         evidence_notes=evidence_notes,
         document_signals=documents.signals,

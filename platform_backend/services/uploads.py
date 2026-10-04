@@ -225,3 +225,43 @@ async def read_uploads(files: Sequence[UploadFile]) -> Tuple[List[Image.Image], 
         paths.append(save_image(raw, fmt))
 
     return images, ";".join(paths) if paths else "none"
+
+
+def load_stored_evidence(image_paths: str, document_paths: str) -> Tuple[List[Image.Image], List[Any]]:
+    """
+    Re-read a submission's saved photographs and documents from the upload directory.
+
+    Used to restart a job that was accepted but never began, after the process holding its
+    decoded images in memory stopped. Raises FileNotFoundError when anything is missing —
+    a job re-run on partial evidence would be a different analysis from the one submitted.
+    """
+    from google.genai import types
+
+    def files(joined: str) -> List[Path]:
+        out = []
+        for path in [p for p in (joined or "").split(";") if p and p != "none"]:
+            name = path.split("/", 1)[1] if path.startswith(f"{UPLOAD_URL_PREFIX}/") else ""
+            if not name or "/" in name or "\\" in name:
+                raise FileNotFoundError(path)
+            target = upload_dir() / name
+            if not target.is_file():
+                raise FileNotFoundError(path)
+            out.append(target)
+        return out
+
+    # Decoded exactly as `read_uploads` decodes them — opened and fully loaded, **not**
+    # converted. `convert()` drops `.format`, and preflight rejects an image whose format it
+    # cannot see, so a converted re-load would turn every requeued claim into "no usable
+    # image" without a word of explanation.
+    images = []
+    for f in files(image_paths):
+        image = Image.open(f)
+        image.load()
+        images.append(image)
+    documents = []
+    for f in files(document_paths):
+        mime = _DOCUMENT_MIME.get(f.suffix.lstrip(".").lower())
+        if mime is None:
+            raise FileNotFoundError(str(f))
+        documents.append(types.Part.from_bytes(data=f.read_bytes(), mime_type=mime))
+    return images, documents

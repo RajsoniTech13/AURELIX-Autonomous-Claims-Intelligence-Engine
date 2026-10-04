@@ -6,19 +6,21 @@
 > claim photographs, which bring lighting, occlusion, reflections and motion blur
 > that this set does not contain.
 
-- Ground truth: `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/data/synthetic/ground_truth.csv`
-- Predictions: `/Users/raj.v.soni/GITHUB/HackerRank Hackathon/agent_core/output/results_detail.json`
+- Ground truth: `agent_core/data/synthetic/ground_truth.csv`
+- Predictions: `agent_core/output/results_detail.json`
 
 ## Headline
 
-| metric | value |
-| :--- | ---: |
-| Cases scored | 44 / 44 |
-| **Accuracy** | **95.5%** |
-| Macro F1 | 95.0% |
-| Weighted F1 | 95.4% |
-| Mean confidence | 70 |
-| Mean fraud score | 20 |
+| metric | value | 95% bootstrap interval |
+| :--- | ---: | ---: |
+| Cases scored | 44 / 44 | |
+| **Accuracy** | **95.5%** | 88.6% – 100.0% |
+| Macro F1 | 95.0% | 86.0% – 100.0% |
+| Weighted F1 | 95.4% | |
+| Mean confidence | 70 | |
+| Mean fraud score | 20 | |
+
+The intervals are a percentile bootstrap: 10,000 resamples of the 44 cases with replacement, seed 7. With only 44 cases they are wide, and they describe variation between sets of *synthetic* cases like these — not accuracy on real photographs.
 
 ## Per class
 
