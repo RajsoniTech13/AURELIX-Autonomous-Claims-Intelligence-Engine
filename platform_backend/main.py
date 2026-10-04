@@ -141,7 +141,8 @@ def on_startup():
 
     from agent_core.retrieval.collections import IndexBundle
     try:
-        app.state.index = IndexBundle.load()
+        # Serving mode: never embed documents in the web process — see HybridRetriever.index.
+        app.state.index = IndexBundle.load(embed_documents=False)
         counts = {n: m.count for n, m in app.state.index.meta.items()}
         print(f"[Retrieval] index loaded: {counts or 'empty — run tools.build_index'}")
     except ValueError as e:

@@ -118,3 +118,24 @@ def test_the_optional_sdks_are_not_deployed():
     deployed = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert "anthropic" not in deployed.lower()
     assert "openai==" in deployed, "the Groq adapter needs the openai SDK pinned"
+
+
+def test_the_api_never_embeds_the_corpus_in_the_web_process():
+    """
+    Measured: embedding the policy inside the server adds ~139 MB of ONNX working memory on a
+    512 MB instance. The API must load its index in serving mode, where documents are never
+    embedded and missing vectors fall back to LSA instead.
+    """
+    main = (REPO_ROOT / "platform_backend" / "main.py").read_text(encoding="utf-8")
+    assert "IndexBundle.load(embed_documents=False)" in main
+
+
+def test_downloaded_models_and_vectors_are_never_committed():
+    """Read from .gitignore itself, so this holds in any checkout, git or not."""
+    patterns = [ln.strip() for ln in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()]
+    assert ".aurelix/" in patterns, ".aurelix/ must stay gitignored: it holds model weights and built vectors"
+
+
+def test_the_build_still_builds_the_index_that_holds_the_vectors():
+    render = (REPO_ROOT / "render.yaml").read_text(encoding="utf-8")
+    assert "python -m agent_core.tools.build_index" in render

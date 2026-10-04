@@ -2,7 +2,8 @@
 The three retrieval collections, and the index lifecycle around them.
 
     historical_claims   past claims + what was actually observed on them
-    policy_rules        evidence requirements, chunked, each with a stable rule_id
+    policy_rules        evidence requirements, each with a stable rule_id (`kind: requirement`),
+                        and the policy wording, one clause per document (`kind: clause`)
     fraud_patterns      the curated playbook, for reviewer context
 
 **Built offline, versioned, loaded once.** `services/vector_store.py` rebuilt its entire
@@ -32,7 +33,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import yaml
 
-from agent_core.retrieval.hybrid import Document, HybridRetriever
+from agent_core.retrieval.hybrid import Document, HybridRetriever, LSABackend
+from agent_core.retrieval.vector_store import NumpyVectorStore
 
 INDEX_VERSION = 1
 DEFAULT_INDEX_DIR = Path(".aurelix/index")
@@ -132,6 +134,7 @@ def build_policy_rules(csv_path: Path) -> List[Document]:
                     doc_id=f"EV-{obj.upper()}-{suffix}",
                     text=template.format(obj=obj, value=value.replace(";", ", ")),
                     metadata={
+                        "kind": "requirement",
                         "object_category": obj,
                         "requirement": column,
                         "value": value,
@@ -185,6 +188,8 @@ class IndexBundle:
     documents: Dict[str, List[Document]] = field(default_factory=dict)
     meta: Dict[str, CollectionMeta] = field(default_factory=dict)
     _retrievers: Dict[str, HybridRetriever] = field(default_factory=dict, repr=False)
+    # False when loaded by a server: documents are embedded only by the offline build.
+    embed_documents: bool = True
 
     # ── lifecycle ──
 
@@ -216,18 +221,31 @@ class IndexBundle:
                 [{"doc_id": d.doc_id, "text": d.text, "metadata": d.metadata} for d in docs],
                 indent=1,
             ), encoding="utf-8")
+        dense: Dict[str, Any] = {}
+        for name, retriever in self._retrievers.items():
+            # Only an embedding model's vectors are worth keeping: LSA is refitted to its
+            # corpus on every build and costs nothing to recompute.
+            if not isinstance(retriever.dense, LSABackend) and retriever.store.count():
+                retriever.store.save(self._vectors_path(name), retriever.dense.identity)
+            dense[name] = {
+                "identity": retriever.dense.identity,
+                "fallback": retriever.dense_fallback,
+                **retriever.last_build,
+            }
         manifest = {
             "index_version": INDEX_VERSION,
             "collections": {n: m.to_dict() for n, m in self.meta.items()},
+            "dense": dense,
         }
         path = self.directory / "manifest.json"
         path.write_text(json.dumps(manifest, indent=1), encoding="utf-8")
         return path
 
     @classmethod
-    def load(cls, directory: Path | str = DEFAULT_INDEX_DIR) -> "IndexBundle":
+    def load(cls, directory: Path | str = DEFAULT_INDEX_DIR, *,
+             embed_documents: bool = True) -> "IndexBundle":
         directory = Path(directory)
-        bundle = cls(directory=directory)
+        bundle = cls(directory=directory, embed_documents=embed_documents)
         manifest_path = directory / "manifest.json"
         if not manifest_path.exists():
             return bundle
@@ -263,17 +281,34 @@ class IndexBundle:
 
     # ── query ──
 
+    def _vectors_path(self, name: str) -> Path:
+        return self.directory / f"{name}.vectors.npz"
+
     def retriever(self, name: str) -> HybridRetriever:
-        """Built on first use and cached. Never per query."""
+        """
+        Built on first use and cached. Never per query.
+
+        Saved vectors are reused when they were made in the same vector space and the
+        document's content hash still matches, so a server boot embeds nothing and an index
+        rebuild embeds only what changed.
+        """
         if name not in self._retrievers:
-            self._retrievers[name] = HybridRetriever().index(self.documents.get(name, []))
+            retriever = HybridRetriever()
+            previous = None
+            if not isinstance(retriever.dense, LSABackend):
+                previous = NumpyVectorStore.load(self._vectors_path(name), retriever.dense.identity)
+            self._retrievers[name] = retriever.index(
+                self.documents.get(name, []), previous=previous,
+                embed_documents=self.embed_documents,
+            )
         return self._retrievers[name]
 
     def search(
         self, name: str, query: str, *,
         filters: Optional[Dict[str, Any]] = None, top_k: Optional[int] = None,
+        mode: str = "hybrid",
     ):
-        return self.retriever(name).search(query, filters=filters, top_k=top_k)
+        return self.retriever(name).search(query, filters=filters, top_k=top_k, mode=mode)
 
     def fraud_patterns_for(self, object_category: str, query: str, top_k: int = 3):
         """
@@ -290,8 +325,13 @@ class IndexBundle:
         ][:top_k]
 
     def policy_rules_for(self, object_category: str) -> List[Document]:
-        """Every requirement that applies to a category, in citable form."""
+        """Every evidence requirement that applies to a category, in citable form."""
         return [
             d for d in self.documents.get(POLICY_RULES, [])
-            if d.metadata.get("object_category") == object_category.lower()
+            if d.metadata.get("kind", "requirement") == "requirement"
+            and d.metadata.get("object_category") == object_category.lower()
         ]
+
+    def policy_clauses(self) -> List[Document]:
+        """The policy wording, one document per clause."""
+        return [d for d in self.documents.get(POLICY_RULES, []) if d.metadata.get("kind") == "clause"]

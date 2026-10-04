@@ -34,3 +34,12 @@ opencv-python-headless>=4.10
 # measured +17.6 MB peak RSS when loaded (113.2 -> 130.8 MB for the whole app). Pinned to
 # the version whose source the adapter was written against.
 openai==2.43.0
+
+# ── Policy Copilot retrieval (Phase 7) ──────────────────────────────────────
+# A local ONNX sentence-embedding model (BAAI/bge-small-en-v1.5, 67 MB, MIT), run on CPU.
+# No API, no quota. Wheels verified for linux x86_64 / CPython 3.13 (Render) and 3.14.
+# The model is downloaded once by `python -m agent_core.tools.build_index` during the build
+# and embeds the policy there; the server only embeds questions. Measured serving footprint:
+# 287 MB for the whole API with the model loaded (evaluation/rag/report.md).
+fastembed==0.8.1
+onnxruntime==1.30.0
