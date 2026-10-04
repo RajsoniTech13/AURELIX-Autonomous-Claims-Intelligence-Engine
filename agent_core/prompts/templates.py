@@ -21,6 +21,10 @@ PROMPT_VERSION = "v3"
 # Patterns that indicate someone is trying to steer the model rather than describe damage.
 # Detection is advisory: we flag, log, and keep analysing. We never let a match change the
 # verdict by itself, because a claimant writing "please approve this" is not proof of fraud.
+#
+# Live since Phase 7: `agent_core.service.judge` calls `detect_injection` on every claim
+# statement and adds the `text_instruction_present` risk flag, which sends the claim to a
+# human reviewer. It is the deterministic twin of the model's `instruction_like_text_present`.
 _INJECTION_PATTERNS = (
     r"ignore\s+(all\s+|any\s+)?previous\s+instructions",
     r"ignore\s+the\s+above",
