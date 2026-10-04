@@ -395,6 +395,10 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Offline retrieval evaluation (no API calls)")
     p.add_argument("--no-embeddings", action="store_true", help="LSA and BM25 only; no model download")
     p.add_argument("--no-memory", action="store_true", help="skip the fresh-process memory probes")
+    p.add_argument("--min-recall5", type=float, default=None,
+                   help="exit 1 if the shipped configuration's recall@5 is below this (CI gate)")
+    p.add_argument("--no-report", action="store_true",
+                   help="measure and gate only; leave report.md and results.json untouched")
     args = p.parse_args()
 
     from agent_core.retrieval.policy_corpus import build_policy_clauses
@@ -408,14 +412,25 @@ def main() -> int:
     }
     if not args.no_memory and not args.no_embeddings:
         memory["serving"] = serving_rss_mb()
-    write_report(results, memory, golden)
-    RESULTS.write_text(json.dumps({"results": results, "memory_mb": memory}, indent=1), encoding="utf-8")
+    if not args.no_report:
+        write_report(results, memory, golden)
+        RESULTS.write_text(json.dumps({"results": results, "memory_mb": memory}, indent=1), encoding="utf-8")
 
     for r in results:
         print(f"{r['name']:20} recall@5 {r['recall@5']:.3f}  MRR {r['mrr']:.3f}  nDCG@5 {r['ndcg@5']:.3f}  "
               f"not-found LOO {r['not_found']['leave_one_out_accuracy']:.3f}  {r['median_query_ms']:.1f} ms")
     print(f"memory: {memory}")
-    print(f"wrote {REPORT.relative_to(REPO_ROOT)}")
+    if not args.no_report:
+        print(f"wrote {REPORT.relative_to(REPO_ROOT)}")
+
+    if args.min_recall5 is not None:
+        # The gate checks what is deployed: hybrid BM25 + bge-small (config/retrieval.yaml).
+        shipped = "hybrid-lsa" if args.no_embeddings else "hybrid-bge"
+        got = next(r["recall@5"] for r in results if r["name"] == shipped)
+        if got < args.min_recall5:
+            print(f"FAIL: {shipped} recall@5 {got:.3f} is below the floor {args.min_recall5:.3f}")
+            return 1
+        print(f"PASS: {shipped} recall@5 {got:.3f} >= {args.min_recall5:.3f}")
     return 0
 
 
