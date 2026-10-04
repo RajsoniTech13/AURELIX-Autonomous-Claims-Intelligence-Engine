@@ -114,6 +114,11 @@ def ready():
 def on_startup():
     init_db()
 
+    # Persist one row per model call. Subscribed here, not at import, so importing the app
+    # in a script or a test does not start writing telemetry by accident.
+    from platform_backend.services import llm_telemetry
+    llm_telemetry.install()
+
     # The retrieval index is built offline by `python -m agent_core.tools.build_index` and
     # only loaded here. The previous startup hook re-indexed a CSV into a TF-IDF store on
     # every boot, and nothing consumed the result.
@@ -155,6 +160,9 @@ def on_shutdown():
     # 20-request daily budget.
     from platform_backend.services.jobs import shutdown
     shutdown(wait=True)
+
+    from platform_backend.services import llm_telemetry
+    llm_telemetry.uninstall()
 
 
 app.include_router(v1_router)

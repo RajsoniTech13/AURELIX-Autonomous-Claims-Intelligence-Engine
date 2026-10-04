@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import datetime
 import json
+import uuid
 from typing import Any, Dict, Iterator, List, Optional
 
 from sqlalchemy.orm import Session
 
 from agent_core.service import ClaimAnalysis, analyse_claim_events
 from platform_backend.db.models import AuditLog, Claim
+from platform_backend.services.llm_telemetry import link_calls_to_claim
 
 
 def _now() -> str:
@@ -322,18 +324,22 @@ def execute_claim_sync(
     document_paths: str = "none",
 ) -> Claim:
     """Analyse one claim and persist it. Signature unchanged from the pre-migration version."""
+    request_id = uuid.uuid4().hex
     analysis: Optional[ClaimAnalysis] = None
     for event in analyse_claim_events(
         user_id=user_id, user_claim=user_claim, claim_object=claim_object,
         image_paths=image_paths, images=pil_images or None,
         image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
+        request_id=request_id,
     ):
         if event["stage"] == "done":
             analysis = event["analysis"]
 
     assert analysis is not None
     db_claim = _analysis_to_db_claim(analysis, user_id, image_paths, user_claim, claim_object)
-    return _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis, document_paths))
+    db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis, document_paths))
+    link_calls_to_claim(db, request_id, db_claim.id)
+    return db_claim
 
 
 def generate_claim_stream(
@@ -356,12 +362,16 @@ def generate_claim_stream(
     changed, because the stages themselves did — see docs/PHASE_4.2_REPORT.md.
     """
     analysis: Optional[ClaimAnalysis] = None
+    # Labels this submission's model calls so their cost can be attached to the claim row,
+    # which does not exist yet while perception runs.
+    request_id = uuid.uuid4().hex
     try:
         for event in _events_with_heartbeat(
             user_id=user_id, user_claim=user_claim, claim_object=claim_object,
             image_paths=image_paths, images=pil_images or None,
             documents=documents or None,
             image_base_dir=image_base_dir, user_history=u_history, evidence_rules=e_rules,
+            request_id=request_id,
         ):
             if event is _HEARTBEAT:
                 # An SSE comment. Invisible to the client's event handler, but it is bytes
@@ -378,6 +388,7 @@ def generate_claim_stream(
             analysis, user_id, image_paths, user_claim, claim_object,
         )
         db_claim = _save_claim_and_audit(db, db_claim, _audit_logs_for(analysis, document_paths))
+        link_calls_to_claim(db, request_id, db_claim.id)
         yield f'data: {json.dumps({"stage": "done", "claim": _claim_to_dict(db_claim)})}\n\n'
 
     except Exception as e:  # noqa: BLE001 - the stream must report, not crash the response

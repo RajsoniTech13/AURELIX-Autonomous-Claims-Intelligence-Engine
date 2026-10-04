@@ -44,6 +44,8 @@ from agent_core.agents.perception import (
 )
 from agent_core.agents.policy_verification import run_policy_verification_agent
 from agent_core.agents.user_risk import run_user_risk_agent
+from agent_core.llm import telemetry
+from agent_core.prompts.batch_perception import BATCH_SYSTEM_PROMPT
 from agent_core.retrieval.image_index import DuplicateMatch, ImageIndex, indexable
 from agent_core.rules_engine import Verdict, decide, effective_quality
 from agent_core.schemas.contract import (
@@ -77,6 +79,9 @@ PIPELINE_STAGES: tuple[str, ...] = (
 
 LLM_STAGES: frozenset[str] = frozenset({"perception"})
 """The stages that reach the network. Exactly one, and that is the point."""
+
+PERCEPTION_PROMPT_VERSION = telemetry.prompt_fingerprint(BATCH_SYSTEM_PROMPT, "perception")
+"""Content-addressed, so a telemetry row always names the exact prompt that produced it."""
 
 
 @dataclass
@@ -226,6 +231,7 @@ def analyse_claim_events(
     evidence_rules: Optional[Dict[str, Any]] = None,
     claim_id: Optional[str] = None,
     image_index: Optional[ImageIndex] = None,
+    request_id: Optional[str] = None,
 ) -> Iterator[Dict[str, Any]]:
     """
     Analyse one claim, yielding a progress event per stage.
@@ -236,6 +242,10 @@ def analyse_claim_events(
 
     Two image supply modes, matching the two front doors: decoded `images` for a web upload,
     or `image_paths` resolved against `image_base_dir` for a CSV row.
+
+    `request_id` only labels telemetry: the web backend passes one so the perception call's
+    cost can be attached to the claim row after it is saved. It changes nothing about the
+    analysis.
     """
     cid = claim_id or user_id
     row = {
@@ -304,7 +314,12 @@ def analyse_claim_events(
             images=usable, raw=row, documents=list(documents or []),
         )
         try:
-            perception = run_batch_perception([prepared]).get(cid)
+            # Labels the telemetry record the Gemini client emits; does not touch the request.
+            with telemetry.call_context(
+                task="perception", request_id=request_id,
+                prompt_version=PERCEPTION_PROMPT_VERSION,
+            ):
+                perception = run_batch_perception([prepared]).get(cid)
             llm_requests = 1
             if perception is None:
                 perception_failed = True
