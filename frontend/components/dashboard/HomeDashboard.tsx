@@ -77,9 +77,12 @@ function Kpi({ label, value, sub, tone, onClick }: {
 export function HomeDashboard({
   onNavigate,
   onSelectClaim,
+  reviewer = true,
 }: {
   onNavigate: (tab: string) => void;
   onSelectClaim?: (claimId: number) => void;
+  /** Claimants see only their own claims, and the claim-book KPIs are reviewer data. */
+  reviewer?: boolean;
 }) {
   const [claims, setClaims] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -92,7 +95,7 @@ export function HomeDashboard({
       // losing one should not blank the other.
       const [recent, analytics] = await Promise.allSettled([
         getClaims({ limit: 10 }),
-        getAnalytics(),
+        reviewer ? getAnalytics() : Promise.resolve(null),
       ]);
       if (recent.status === "fulfilled") setClaims(recent.value);
       else setError(recent.reason?.message ?? "Could not load recent investigations.");
@@ -100,7 +103,7 @@ export function HomeDashboard({
       setLoading(false);
     };
     load();
-  }, []);
+  }, [reviewer]);
 
   const k = stats?.kpis;
   const total = k?.total_claims ?? 0;
@@ -110,7 +113,7 @@ export function HomeDashboard({
       {/* ── Page header ────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Claims Intelligence</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{reviewer ? "Claims Intelligence" : "Your claims"}</h1>
           <p className="text-[13px] text-muted-foreground mt-1 max-w-xl leading-relaxed">
             Autonomous verification of damage claims. Every decision is produced by
             deterministic rules over model observations, and every rule is recorded.
@@ -135,7 +138,7 @@ export function HomeDashboard({
         A 1px gap over a line-coloured background paints the separators from the
         grid itself, so it is correct at any column count.
       */}
-      <div className="rounded-lg border border-line bg-line overflow-hidden">
+      {reviewer && <div className="rounded-lg border border-line bg-line overflow-hidden">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
@@ -171,13 +174,13 @@ export function HomeDashboard({
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ── Recent investigations ──────────────────────────────────────── */}
       <section>
         <SectionTitle
           action={
-            claims.length > 0 && (
+            reviewer && claims.length > 0 && (
               <button
                 onClick={() => onNavigate("queue")}
                 className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1

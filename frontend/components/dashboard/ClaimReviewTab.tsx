@@ -90,8 +90,10 @@ function Lightbox({ src, index, total, onClose }: {
 }
 
 export function ClaimReviewTab({
-  claim, loading, error, onClaimUpdated, onNavigate,
+  claim, loading, error, onClaimUpdated, onNavigate, reviewer = true,
 }: {
+  /** Reviewers decide claims and use the copilot; a claimant reads their own case file. */
+  reviewer?: boolean;
   claim: any;
   loading?: boolean;
   error?: string | null;
@@ -178,6 +180,9 @@ export function ClaimReviewTab({
 
   const humanVerdict: string | null = claim.manual_verdict ?? null;
   const awaitingHuman = claim.manual_review_required && !humanVerdict;
+  // Evidence is served only by signed, expiring URLs minted for this viewer by the API;
+  // a bare path would be refused.
+  const evidenceUrl = (path: string) => assetUrl(claim.asset_urls?.[path] ?? path);
   const ruleIds: string[] = verdict?.rule_ids ?? [];
 
   const decide = async (v: "approved" | "rejected") => {
@@ -198,7 +203,7 @@ export function ClaimReviewTab({
     <div className="space-y-7 pb-10">
       {lightbox !== null && images[lightbox] && (
         <Lightbox
-          src={assetUrl(images[lightbox])}
+          src={evidenceUrl(images[lightbox])}
           index={lightbox + 1}
           total={images.length}
           onClose={() => setLightbox(null)}
@@ -297,7 +302,7 @@ export function ClaimReviewTab({
                     aria-label={`Open evidence ${i + 1}`}
                   >
                     <img
-                      src={assetUrl(path)}
+                      src={evidenceUrl(path)}
                       alt={`Claim evidence ${i + 1}`}
                       loading="lazy"
                       className="h-full w-full object-cover transition-transform duration-(--dur-slow)
@@ -442,7 +447,7 @@ export function ClaimReviewTab({
 
                       {docPaths[i] && (
                         <a
-                          href={assetUrl(docPaths[i])}
+                          href={evidenceUrl(docPaths[i])}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1.5 text-[12px] text-(--aurelix-accent)
@@ -549,7 +554,7 @@ export function ClaimReviewTab({
             </section>
           )}
 
-          {awaitingHuman && (
+          {awaitingHuman && reviewer && (
             <section>
               <SectionTitle>Your decision</SectionTitle>
               <textarea
@@ -598,10 +603,12 @@ export function ClaimReviewTab({
             </section>
           )}
 
-          <section>
-            <SectionTitle>Policy Copilot</SectionTitle>
-            <PolicyCopilot />
-          </section>
+          {reviewer && (
+            <section>
+              <SectionTitle>Policy Copilot</SectionTitle>
+              <PolicyCopilot />
+            </section>
+          )}
 
           <section>
             <SectionTitle>Case record</SectionTitle>

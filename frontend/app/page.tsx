@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity, PlusCircle, FileText, ShieldCheck, BarChart3,
-  PanelLeftClose, PanelLeftOpen, Menu, X,
+  PanelLeftClose, PanelLeftOpen, Menu, X, LogOut, Loader2,
 } from "lucide-react";
+import { SignIn } from "@/components/auth/SignIn";
+import { getUser, isReviewer, onSessionChange, refreshSession, signOut, type SessionUser } from "@/lib/auth";
 import { SubmitClaimTab } from "@/components/dashboard/SubmitClaimTab";
 import { ClaimReviewTab } from "@/components/dashboard/ClaimReviewTab";
 import { ReviewQueueTab } from "@/components/dashboard/ReviewQueueTab";
@@ -39,6 +41,8 @@ const NAV = [
 ];
 
 const ALL_ITEMS = NAV.flatMap(g => g.items);
+// Review tools are reviewer data: a claimant's navigation does not offer what the API refuses.
+const REVIEWER_ONLY = new Set(["queue", "analytics"]);
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -47,8 +51,26 @@ export default function Dashboard() {
   const [claimLoading, setClaimLoading] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [booting, setBooting] = useState(true);
 
-  const active = ALL_ITEMS.find(i => i.id === activeTab);
+  // Restore a session from the stored refresh token before deciding to show the sign-in
+  // screen, so a page reload does not sign the reviewer out.
+  useEffect(() => {
+    const stop = onSessionChange(u => {
+      setUser(u);
+      if (!u) { setSelectedClaim(null); setActiveTab("overview"); }
+    });
+    if (getUser()) { setUser(getUser()); setBooting(false); }
+    else refreshSession().finally(() => { setUser(getUser()); setBooting(false); });
+    return stop;
+  }, []);
+
+  const reviewer = isReviewer(user);
+  const nav = NAV.map(g => ({ ...g, items: g.items.filter(i => reviewer || !REVIEWER_ONLY.has(i.id)) }))
+                 .filter(g => g.items.length > 0);
+  const tab = !reviewer && REVIEWER_ONLY.has(activeTab) ? "overview" : activeTab;
+  const active = ALL_ITEMS.find(i => i.id === tab);
 
   const go = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -86,12 +108,12 @@ export default function Dashboard() {
 
   const navList = (collapsed: boolean) => (
     <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3" aria-label="Primary">
-      {NAV.map(group => (
+      {nav.map(group => (
         <div key={group.title} className="px-3 mb-5 last:mb-0">
           {!collapsed && <div className="label-meta px-2 mb-1.5">{group.title}</div>}
           <ul className="space-y-0.5">
             {group.items.map(item => {
-              const isActive = activeTab === item.id;
+              const isActive = tab === item.id;
               return (
                 <li key={item.id}>
                   <button
@@ -145,6 +167,15 @@ export default function Dashboard() {
       )}
     </div>
   );
+
+  if (booting) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center gap-2 text-[13px] text-muted-foreground" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Restoring your session…
+      </div>
+    );
+  }
+  if (!user) return <SignIn />;
 
   return (
     <div className="flex h-dvh w-full overflow-hidden text-foreground">
@@ -224,6 +255,20 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <SystemHealth />
             <div className="h-4 w-px bg-line hidden md:block" aria-hidden />
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[12px] text-muted-foreground max-w-[200px]"
+                  title={user.username}>
+              <span className="truncate">{user.is_demo ? `Demo ${user.role}` : user.username}</span>
+              <span className="rounded border border-line px-1 py-px text-[10px] uppercase tracking-wide">{user.role}</span>
+            </span>
+            <button
+              onClick={() => signOut()}
+              aria-label="Sign out"
+              title="Sign out"
+              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground
+                         hover:text-foreground hover:bg-surface-2 transition-colors duration-(--dur-fast)"
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+            </button>
             <ThemeToggle />
           </div>
         </header>
@@ -244,24 +289,25 @@ export default function Dashboard() {
             */}
             <div>
               <motion.div
-                key={activeTab}
+                key={tab}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
-                {activeTab === "overview" && (
-                  <HomeDashboard onNavigate={go} onSelectClaim={openClaim} />
+                {tab === "overview" && (
+                  <HomeDashboard onNavigate={go} onSelectClaim={openClaim} reviewer={reviewer} />
                 )}
-                {activeTab === "submit" && (
+                {tab === "submit" && (
                   // Re-fetch rather than handing over the streamed claim: the SSE payload
                   // carries the audit trail's reasoning but not each stage's structured
                   // `outputs`, which is what the case file reads to show claimed against
                   // observed. Passing the streamed object straight through renders a case
                   // file with the comparison table missing.
-                  <SubmitClaimTab onClaimSubmitted={claim => openClaim(claim.id)} onNavigate={go} />
+                  <SubmitClaimTab onClaimSubmitted={claim => openClaim(claim.id)} onNavigate={go} user={user} />
                 )}
-                {activeTab === "review" && (
+                {tab === "review" && (
                   <ClaimReviewTab
+                    reviewer={reviewer}
                     claim={selectedClaim}
                     loading={claimLoading}
                     error={claimError}
@@ -269,8 +315,8 @@ export default function Dashboard() {
                     onClaimUpdated={updated => openClaim(updated.id)}
                   />
                 )}
-                {activeTab === "queue" && <ReviewQueueTab onSelectClaim={openClaim} onNavigate={go} />}
-                {activeTab === "analytics" && <AnalyticsTab />}
+                {tab === "queue" && <ReviewQueueTab onSelectClaim={openClaim} onNavigate={go} />}
+                {tab === "analytics" && <AnalyticsTab />}
               </motion.div>
             </div>
           </div>
