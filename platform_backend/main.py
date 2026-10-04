@@ -184,12 +184,15 @@ def on_startup():
     # pool. Failing them is honest; leaving them `running` means a client polls forever
     # and no operator ever finds out.
     from platform_backend.db.session import SessionLocal
-    from platform_backend.services.jobs import reap_orphans
+    from platform_backend.services.jobs import reap_orphans, requeue_pending
     db = SessionLocal()
     try:
         reaped = reap_orphans(db)
         if reaped:
             print(f"[Jobs] marked {reaped} interrupted job(s) as failed")
+        requeued = requeue_pending(db)
+        if requeued:
+            print(f"[Jobs] restarted {requeued} job(s) that were queued but never began")
     finally:
         db.close()
 

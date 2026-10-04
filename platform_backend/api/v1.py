@@ -112,9 +112,15 @@ async def submit_claim(
         "user_id": user_id, "user_claim": user_claim, "claim_object": claim_object,
         "image_paths": image_paths, "document_paths": document_paths,
     }
-    job = job_service.create_job(
+    job, created = job_service.create_or_get_job(
         db, user_id=user_id, payload=payload, idempotency_key=idempotency_key,
     )
+    if not created:
+        # Lost a race with an identical retry: report the job that won, start nothing.
+        return Response(
+            content=json.dumps({**_job_view(job), "idempotent_replay": True}),
+            media_type="application/json", status_code=200,
+        )
     job_service.submit(job.id, images, doc_parts)
 
     response.headers["Location"] = f"/api/v1/jobs/{job.id}"

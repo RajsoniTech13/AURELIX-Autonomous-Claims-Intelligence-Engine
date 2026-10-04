@@ -29,6 +29,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agent_core.service import PIPELINE_STAGES, ClaimAnalysis, analyse_claim_events
@@ -94,30 +95,57 @@ def find_by_idempotency_key(db: Session, user_id: str, key: str) -> Optional[Job
     )
 
 
-def create_job(
+def create_or_get_job(
     db: Session, *, user_id: str, payload: Dict[str, Any],
     idempotency_key: Optional[str] = None,
-) -> Job:
+) -> tuple[Job, bool]:
+    """
+    Create a job, or — when the same user already used this Idempotency-Key — return theirs.
+
+    The route checks for an existing job first, but two retries can both pass that check
+    before either inserts. The unique index on (user_id, idempotency_key) turns the second
+    insert into an IntegrityError, and the loser gets the winner's job: one job, one model
+    request, however the race falls. Returns `(job, created)`.
+    """
     job = Job(
         id=str(uuid.uuid4()), user_id=user_id, status="queued",
         progress=[{"stage": s, "status": "pending"} for s in PIPELINE_STAGES],
         idempotency_key=idempotency_key or None, submitted_payload=payload,
     )
     db.add(job)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = find_by_idempotency_key(db, user_id, idempotency_key or "")
+        if existing is None:
+            raise
+        return existing, False
     db.refresh(job)
-    return job
+    return job, True
+
+
+def create_job(
+    db: Session, *, user_id: str, payload: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
+) -> Job:
+    return create_or_get_job(db, user_id=user_id, payload=payload, idempotency_key=idempotency_key)[0]
 
 
 def reap_orphans(db: Session) -> int:
     """
     Fail jobs left `running` by a process that died.
 
-    A single-process pool cannot resume them, and a job stuck in `running` forever is worse
-    than one that reports honestly that it was interrupted: a client polls it indefinitely,
-    and no operator ever finds out.
+    A job stuck in `running` forever is worse than one that reports honestly that it was
+    interrupted: a client polls it indefinitely and no operator ever finds out. Only
+    `running` jobs: a `queued` job never started, so nothing about it is lost —
+    `requeue_pending` starts it instead.
+
+    Assumes one worker process, as deployed. With several, a starting process could not
+    tell a dead peer's running job from a live one's; that needs a lease or heartbeat,
+    which is part of the Phase B move to a shared job queue.
     """
-    orphans = db.query(Job).filter(Job.status.in_(["queued", "running"])).all()
+    orphans = db.query(Job).filter(Job.status == "running").all()
     for job in orphans:
         job.status = "failed"
         job.error = "Interrupted: the worker process stopped before this job completed."
@@ -125,6 +153,34 @@ def reap_orphans(db: Session) -> int:
     if orphans:
         db.commit()
     return len(orphans)
+
+
+def requeue_pending(db: Session) -> int:
+    """
+    Start jobs that were accepted but never began, from the evidence saved at submission.
+
+    Their decoded images lived in the memory of a process that has since stopped, but the
+    photographs and documents were written to the upload directory before the 202 was sent,
+    so the exact submission can be reconstructed. A job whose evidence is gone is failed
+    with that reason rather than re-run on partial evidence.
+    """
+    from platform_backend.services.uploads import load_stored_evidence
+
+    count = 0
+    for job in db.query(Job).filter(Job.status == "queued").all():
+        payload = job.submitted_payload or {}
+        try:
+            images, documents = load_stored_evidence(payload.get("image_paths", ""),
+                                                     payload.get("document_paths", ""))
+        except FileNotFoundError as exc:
+            job.status = "failed"
+            job.error = f"Interrupted before it started, and its evidence is no longer stored ({exc})."
+            job.finished_at = _now()
+            db.commit()
+            continue
+        submit(job.id, images, documents)
+        count += 1
+    return count
 
 
 # ─── Execution ──────────────────────────────────────────────────────────────
@@ -158,13 +214,18 @@ def run_job(job_id: str, images: Optional[list] = None, documents: Optional[list
     """
     db = SessionLocal()
     try:
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if job is None or job.status in TERMINAL_STATUSES:
-            return
-
-        job.status = "running"
-        job.started_at = _now()
+        # Claim the job atomically: only one runner can move it from `queued` to `running`.
+        # Without this, a job dispatched twice (a requeue racing the original submit) would
+        # run twice and spend two model requests.
+        claimed = (
+            db.query(Job)
+            .filter(Job.id == job_id, Job.status == "queued")
+            .update({Job.status: "running", Job.started_at: _now()}, synchronize_session=False)
+        )
         db.commit()
+        if claimed != 1:
+            return
+        job = db.query(Job).filter(Job.id == job_id).first()
 
         payload = dict(job.submitted_payload or {})
         analysis: Optional[ClaimAnalysis] = None

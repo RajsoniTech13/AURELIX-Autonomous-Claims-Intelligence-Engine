@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Float, Text, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Float, Index, Text, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime, timezone
 
@@ -86,6 +86,10 @@ class Job(Base):
     has to be durable, which means the database is already the right place for it.
     """
     __tablename__ = "jobs"
+    # One job per (user, Idempotency-Key). The lookup in the route is a fast path; this index
+    # is the guarantee — two retries racing past the lookup cannot both insert. NULL keys are
+    # distinct under a unique index, so submissions without a key are unaffected.
+    __table_args__ = (Index("uq_jobs_user_idempotency", "user_id", "idempotency_key", unique=True),)
 
     id = Column(String(36), primary_key=True, index=True)          # uuid4
     user_id = Column(String(50), nullable=False, index=True)
