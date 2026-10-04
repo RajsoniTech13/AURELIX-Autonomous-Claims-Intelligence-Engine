@@ -9,6 +9,8 @@ import {
   ConfidenceMeter, DecisionBadge, EmptyState, SectionTitle, Skeleton,
   StatusBadge, StatusDot, decisionLabel, decisionTone, riskTone,
 } from "@/components/ui/status";
+import { PolicyBasis } from "@/components/dashboard/PolicyBasis";
+import { PolicyCopilot } from "@/components/dashboard/PolicyCopilot";
 
 /* ── Stage vocabulary ──────────────────────────────────────────────────────
    The pipeline's own stage ids, given reader-facing names. The order is the
@@ -533,6 +535,10 @@ export function ClaimReviewTab({
                   </div>
                 </div>
               )}
+              <div className="mt-3 pt-3 border-t border-line/60">
+                <div className="label-meta mb-1">Policy basis</div>
+                <PolicyBasis claimId={claim.id} />
+              </div>
             </div>
           </section>
 
@@ -591,6 +597,11 @@ export function ClaimReviewTab({
               </p>
             </section>
           )}
+
+          <section>
+            <SectionTitle>Policy Copilot</SectionTitle>
+            <PolicyCopilot />
+          </section>
 
           <section>
             <SectionTitle>Case record</SectionTitle>

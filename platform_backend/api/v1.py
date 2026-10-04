@@ -20,8 +20,9 @@ import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from platform_backend.db.models import Claim, Job
@@ -186,6 +187,57 @@ def llm_metrics(days: int = 7, db: Session = Depends(get_db)):
     """
     from platform_backend.services.llm_telemetry import summarise
     return summarise(db, days=days)
+
+
+class CopilotQuestion(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/copilot/ask")
+def copilot_ask(body: CopilotQuestion, request: Request):
+    """
+    Answer a question about the policy, citing the clauses the answer rests on.
+
+    Retrieval reads only the policy wording. When no clause is close enough the answer is
+    "not in the policy" and no model is called. Every citation in the response is a clause
+    that was actually retrieved, returned with its text so the reviewer can read it.
+    """
+    from agent_core.copilot import ask
+
+    bundle = getattr(request.app.state, "index", None)
+    if bundle is None or not bundle.policy_clauses():
+        raise HTTPException(status_code=503, detail=(
+            "The policy index is not built. Run `python -m agent_core.tools.build_index`."))
+    try:
+        return ask(body.question, bundle).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/claims/{claim_id}/explanation")
+def claim_explanation(claim_id: int, db: Session = Depends(get_db)):
+    """
+    The rule that decided this claim, and the policy clauses behind it. Deterministic: read
+    from the claim's own audit trail and `knowledge/policies/rule_clause_map.yaml`, with no
+    model call.
+    """
+    from agent_core.explanation import explain
+
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if claim is None:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    logs = {log.agent_name: (log.outputs or {}) for log in claim.audit_logs}
+    return {
+        "claim_id": claim.id,
+        **explain(
+            claim_status=claim.claim_status,
+            claim_object=claim.claim_object,
+            decision_rule_ids=logs.get("decision", {}).get("rule_ids") or [],
+            policy_rule_ids=logs.get("policy_verification", {}).get("rule_ids") or [],
+            justification=claim.claim_status_justification or "",
+            escalated=bool(claim.manual_review_required),
+        ),
+    }
 
 
 @router.get("/claims")

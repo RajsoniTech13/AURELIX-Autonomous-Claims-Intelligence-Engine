@@ -167,3 +167,25 @@ export async function getLlmMetrics(days = 7) {
   if (!res.ok) throw await errorFrom(res, "Failed to fetch model usage");
   return res.json();
 }
+
+/**
+ * Ask the Policy Copilot a question about the policy. The answer cites clauses, and every
+ * citation is a clause the server actually retrieved; `status` is `answered`, `not_found`
+ * or `model_unavailable`.
+ */
+export async function askCopilot(question: string) {
+  const res = await call(`/api/v1/copilot/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw await errorFrom(res, "The copilot could not answer");
+  return res.json();
+}
+
+/** The rule that decided a claim and the policy clauses behind it. No model call. */
+export async function getExplanation(claimId: number) {
+  const res = await call(`/api/v1/claims/${claimId}/explanation`);
+  if (!res.ok) throw await errorFrom(res, "Failed to load the policy basis");
+  return res.json();
+}
