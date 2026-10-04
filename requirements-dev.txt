@@ -1,0 +1,5 @@
+# AURELIX — test and CI tooling. Not installed by the deploy.
+#   ./venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+pytest==9.1.1
+httpx==0.28.1          # FastAPI's TestClient
+pip-audit==2.10.1      # known-vulnerability scan of requirements.txt in CI
