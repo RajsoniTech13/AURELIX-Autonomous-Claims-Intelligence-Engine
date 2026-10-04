@@ -36,11 +36,18 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 # Gemini's free-tier daily budget resets at midnight America/Los_Angeles. The visitor
 # cap uses the same boundary so that "resets at" means one thing in the UI rather than
 # two subtly different things.
-_PACIFIC = timezone(timedelta(hours=-8))
+#
+# A named zone, not a fixed UTC-8 offset. The fixed offset ignored daylight saving: under
+# PDT it put the day boundary an hour late, so for an hour each day this module and the
+# quota ledger (which always used the named zone) disagreed about what day it was, and the
+# reset time shown to visitors was wrong. Measured on 2026-10-04: it reported a reset at
+# 08:00Z that had already passed; the real one was 07:00Z the next day.
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 
 
 def _today() -> str:
