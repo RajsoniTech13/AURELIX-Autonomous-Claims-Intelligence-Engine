@@ -157,3 +157,13 @@ export async function getHealth() {
   if (!res.ok) throw await errorFrom(res, "Health check failed");
   return res.json();
 }
+
+/**
+ * Model-call telemetry: calls, p50/p95 latency, list-price cost per claim, cache-hit rate,
+ * and today's remaining Gemini quota. Computed server-side from recorded calls.
+ */
+export async function getLlmMetrics(days = 7) {
+  const res = await call(`/api/v1/metrics/llm?days=${days}`);
+  if (!res.ok) throw await errorFrom(res, "Failed to fetch model usage");
+  return res.json();
+}

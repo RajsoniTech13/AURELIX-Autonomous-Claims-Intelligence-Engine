@@ -8,6 +8,7 @@ import {
 import { Activity, AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { getAnalytics } from "@/lib/api";
 import { EmptyState, SectionTitle, Skeleton } from "@/components/ui/status";
+import { ModelUsageCard } from "@/components/dashboard/ModelUsageCard";
 
 /**
  * Chart palette.
@@ -250,6 +251,8 @@ export function AnalyticsTab() {
           </div>
         </Panel>
       </div>
+
+      <ModelUsageCard />
     </div>
   );
 }

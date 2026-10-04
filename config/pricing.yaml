@@ -1,0 +1,65 @@
+# AURELIX — model list prices, for cost telemetry.
+#
+# AURELIX runs entirely on free tiers, so the BILLED cost of every call is $0. These are
+# LIST prices: what the same traffic would cost on each provider's paid standard tier.
+# Telemetry records that list-price equivalent so cost per claim means something when the
+# question becomes "what happens at real volume".
+#
+# Units: US dollars per 1,000,000 tokens. A model missing from this file prices as
+# "unknown" (null), never as free.
+#
+# Every figure was read from the provider's official page on the `as_of` date. Prices
+# change; re-read the sources and update the date together, never one without the other.
+
+as_of: 2026-10-04
+currency: USD
+unit: per_1m_tokens
+
+providers:
+  gemini:
+    # https://ai.google.dev/gemini-api/docs/pricing  (page last updated 2026-10-01 UTC)
+    # Text/image input price. Audio input is priced higher and is not used here.
+    models:
+      gemini-3.6-flash:
+        # Promotional through 2026-12-31. From 2027-01-01: input 1.50, output 7.50.
+        input: 0.75
+        output: 3.75
+      gemini-3.5-flash:
+        input: 1.50
+        output: 9.00
+      gemini-2.5-flash:
+        input: 0.30
+        output: 2.50
+      gemini-2.5-flash-lite:
+        input: 0.10
+        output: 0.40
+
+  groq:
+    # https://console.groq.com/docs/models
+    models:
+      openai/gpt-oss-20b:
+        input: 0.075
+        output: 0.30
+      openai/gpt-oss-120b:
+        input: 0.15
+        output: 0.60
+
+  openai:
+    # https://developers.openai.com/api/docs/pricing  (standard tier)
+    models:
+      gpt-5-nano:
+        input: 0.05
+        output: 0.40
+      gpt-5-mini:
+        input: 0.25
+        output: 2.00
+
+  anthropic:
+    # Anthropic first-party API rates (claude-api reference, cached 2026-09-25)
+    models:
+      claude-opus-5-5:
+        input: 4.00
+        output: 20.00
+      claude-haiku-4-5:
+        input: 1.00
+        output: 5.00

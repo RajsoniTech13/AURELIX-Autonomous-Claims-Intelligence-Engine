@@ -175,6 +175,19 @@ def get_claim(claim_id: int, db: Session = Depends(get_db)):
     return claim
 
 
+@router.get("/metrics/llm")
+def llm_metrics(days: int = 7, db: Session = Depends(get_db)):
+    """
+    Model usage over the last `days` (1–90): calls per day, p50/p95 latency, list-price cost
+    per claim, cache-hit rate, and today's remaining Gemini quota per model.
+
+    Computed from the `llm_calls` table and the quota ledger — nothing here is estimated.
+    Restricted to reviewer and admin roles once authentication lands (Phase 7 A3).
+    """
+    from platform_backend.services.llm_telemetry import summarise
+    return summarise(db, days=days)
+
+
 @router.get("/claims")
 def list_claims(
     after: Optional[int] = None,

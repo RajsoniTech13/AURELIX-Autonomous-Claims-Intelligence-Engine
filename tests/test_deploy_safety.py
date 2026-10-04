@@ -97,3 +97,24 @@ def test_document_limits_are_documented_for_operators():
     example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
     assert "MAX_DOCUMENT_FILES" in example
     assert "MAX_DOCUMENT_BYTES" in example
+
+
+@pytest.mark.parametrize("pattern", [
+    r"gsk_[0-9A-Za-z]{10,}",        # Groq
+    r"sk-ant-[0-9A-Za-z_\-]{10,}",  # Anthropic
+    r"sk-(proj-)?[0-9A-Za-z]{20,}", # OpenAI
+])
+def test_no_text_provider_key_is_committed(pattern):
+    """Phase 7 added three provider keys to the template. All must stay blank or commented."""
+    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    assert not re.search(pattern, example)
+
+
+def test_the_optional_sdks_are_not_deployed():
+    """
+    `anthropic` is optional and unused by the free deploy. If it slipped into the file Render
+    builds from, every deploy would install a client nothing calls.
+    """
+    deployed = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert "anthropic" not in deployed.lower()
+    assert "openai==" in deployed, "the Groq adapter needs the openai SDK pinned"

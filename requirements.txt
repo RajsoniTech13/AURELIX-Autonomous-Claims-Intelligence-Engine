@@ -27,3 +27,10 @@ numpy>=2.0
 # Headless: the Phase 4.1 quality gate needs cv2.Laplacian, not a GUI toolkit. The non-
 # headless build pulls in X11 shared libraries that are not present in a slim container.
 opencv-python-headless>=4.10
+
+# ── Text gateway (Phase 7) ──────────────────────────────────────────────────
+# The official OpenAI SDK, used for Groq's OpenAI-compatible endpoint (free tier) and for
+# OpenAI itself when a key is set. Imported lazily, only on the first call with a key:
+# measured +17.6 MB peak RSS when loaded (113.2 -> 130.8 MB for the whole app). Pinned to
+# the version whose source the adapter was written against.
+openai==2.43.0

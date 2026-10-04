@@ -39,6 +39,7 @@ from platform_backend.services.claim_service import (
     _audit_logs_for,
     _save_claim_and_audit,
 )
+from platform_backend.services.llm_telemetry import link_calls_to_claim
 
 # Small on purpose: the binding constraint is 5 requests/minute of free quota, not CPU.
 # A larger pool would only queue harder against the rate governor.
@@ -177,6 +178,8 @@ def run_job(job_id: str, images: Optional[list] = None, documents: Optional[list
             image_base_dir=payload.get("image_base_dir"),
             user_history=payload.get("user_history"),
             evidence_rules=payload.get("evidence_rules"),
+            # The job id doubles as the telemetry request id: one job, one submission.
+            request_id=job_id,
         ):
             if event["stage"] == "done":
                 analysis = event["analysis"]
@@ -192,6 +195,7 @@ def run_job(job_id: str, images: Optional[list] = None, documents: Optional[list
             db, db_claim, _audit_logs_for(analysis, payload.get("document_paths", "none")),
         )
 
+        link_calls_to_claim(db, job_id, db_claim.id)
         job.claim_id = db_claim.id
         job.status = "succeeded"
         job.finished_at = _now()

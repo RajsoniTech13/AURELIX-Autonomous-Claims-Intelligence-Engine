@@ -1,0 +1,7 @@
+# AURELIX — optional provider SDKs. NOT installed by the deploy (Render builds from
+# requirements.txt only), because nothing in the free deployment uses them.
+#
+# Install to enable the Anthropic adapter in agent_core/llm/adapters/anthropic.py, then set
+# ANTHROPIC_API_KEY and add an `anthropic` rung to a task in config/limits.yaml:
+#   ./venv/bin/pip install -r requirements-optional.txt
+anthropic==1.11.0

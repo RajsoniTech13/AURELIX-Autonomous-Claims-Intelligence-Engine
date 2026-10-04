@@ -11,6 +11,7 @@ results it cannot vouch for.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -208,8 +209,14 @@ def run_batch_perception(
     if use_cache:
         # Keyed over every claim in the batch, so a re-run with the same grouping is free
         # and a different grouping is a genuine miss.
+        #
+        # The text is hashed with SHA-256, not the builtin `hash()`. Python salts `hash()`
+        # for strings per process (PYTHONHASHSEED), so the old key differed between two
+        # processes given identical input: a cached perception could only ever be found by
+        # the process that wrote it, and a shared Redis cache could never hit at all.
         fingerprint = "|".join(
-            f"{c.claim_id}:{hash_image_bytes(c.images)}:{hash(c.claim_text.strip())}"
+            f"{c.claim_id}:{hash_image_bytes(c.images)}:"
+            f"{hashlib.sha256(c.claim_text.strip().encode('utf-8')).hexdigest()}"
             for c in claims
         )
         cache_key = compute_cache_key(agent_name="batch_perception", claim_text=fingerprint)

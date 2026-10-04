@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Float, Text, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime, timezone
 
@@ -109,3 +109,44 @@ class Job(Base):
     finished_at = Column(DateTime, nullable=True)
 
     claim = relationship("Claim")
+
+
+class LLMCall(Base):
+    """
+    One model request — or one cache hit — and what it cost.
+
+    Written by `services/llm_telemetry.py`, which subscribes to `agent_core.llm.telemetry`.
+    Holds counts and labels only: **no prompt text, no answer, nothing a claimant wrote.**
+    More people can read operational metrics than can read claims, so a metrics table must
+    never become a second copy of claim content.
+
+    A new table, deliberately, rather than columns on `claims`: `create_all` creates missing
+    tables on an existing database but never adds columns to an existing table, so this
+    deploys onto the live SQLite file without a migration.
+
+    `claim_id` is filled in after the claim row exists (the model call happens before it
+    does), by matching `request_id` — see `link_calls_to_claim`.
+    """
+    __tablename__ = "llm_calls"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=get_utc_now, index=True)
+
+    task = Column(String(50), nullable=False, index=True)          # perception, copilot_answer
+    provider = Column(String(30), nullable=False)                   # gemini, groq, cache, ...
+    model = Column(String(80), nullable=False)
+    prompt_version = Column(String(50), nullable=True)
+
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    latency_ms = Column(Integer, default=0)
+    # List-price equivalent in USD; NULL when the model has no listed price. Billed cost on
+    # the free tiers this project uses is $0 — see config/pricing.yaml.
+    cost_usd = Column(Float, nullable=True)
+    cache_hit = Column(Boolean, default=False)
+
+    outcome = Column(String(30), nullable=False, index=True)        # ok, rate_limited, ...
+    error_type = Column(String(80), nullable=True)
+
+    request_id = Column(String(64), nullable=True, index=True)
+    claim_id = Column(Integer, ForeignKey("claims.id"), nullable=True, index=True)

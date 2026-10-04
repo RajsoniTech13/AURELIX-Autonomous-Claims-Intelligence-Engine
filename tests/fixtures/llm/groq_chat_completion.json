@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-fixture-0001",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "openai/gpt-oss-20b",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "logprobs": null,
+      "message": {
+        "role": "assistant",
+        "content": "{\"answer\": \"Damage to the front bumper is covered for car claims.\", \"citations\": [\"COV-2\"], \"not_found\": false}",
+        "refusal": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1000,
+    "completion_tokens": 500,
+    "total_tokens": 1500
+  }
+}

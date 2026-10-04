@@ -37,8 +37,9 @@ from collections import deque
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from agent_core.llm import telemetry
 from agent_core.services.config import (
     active_tier,
     circuit_breaker_config,
@@ -508,6 +509,49 @@ def _execute_with_retry(call, *, description: str):
     ) from last_exc
 
 
+def _outcome_for(exc: BaseException) -> str:
+    """Map a failed attempt onto the telemetry outcome vocabulary."""
+    if _quota_scope(exc) == "per_day":
+        return telemetry.QUOTA_EXHAUSTED
+    code = _status_code(exc)
+    if code == 429:
+        return telemetry.RATE_LIMITED
+    if code in (401, 403):
+        return telemetry.AUTH_ERROR
+    return telemetry.UNAVAILABLE
+
+
+def _emit_attempt(model: str, started: float, outcome: str, usage: Any = None,
+                  error: Optional[BaseException] = None) -> None:
+    """
+    Telemetry for one Gemini attempt. Wrapped so it can never raise into the call path:
+    the perception request must behave identically whether or not anyone is listening.
+
+    Output tokens include `thoughts_token_count`, because Gemini bills thinking tokens as
+    output — leaving them out would under-report cost on every thinking model.
+    """
+    try:
+        telemetry.record_call(
+            provider="gemini",
+            model=model,
+            outcome=outcome,
+            input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
+            output_tokens=(getattr(usage, "candidates_token_count", 0) or 0)
+            + (getattr(usage, "thoughts_token_count", 0) or 0),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            error_type=type(error).__name__ if error is not None else None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[Telemetry] could not record Gemini attempt: %s", exc)
+
+
+def _emit_cache_hit(model: str) -> None:
+    try:
+        telemetry.record_call(provider="gemini", model=model, cache_hit=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[Telemetry] could not record cache hit: %s", exc)
+
+
 def _generate(
     *,
     contents: Any,
@@ -517,19 +561,31 @@ def _generate(
     cache_key: Optional[str],
     est_tokens: int,
     description: str,
+    system_instruction: Optional[str] = None,
+    max_output_tokens: Optional[int] = None,
 ) -> T:
     if cache_key:
         cached = _cache_get(cache_key)
         if cached:
             logger.info("[Cache] hit for %s", description)
+            _emit_cache_hit(model)
             return response_model.model_validate_json(cached)
 
     from google.genai import types
+
+    # The two optional settings are only passed when set, so the perception request — which
+    # never sets them — is built exactly as it was before they existed.
+    extra: Dict[str, Any] = {}
+    if system_instruction is not None:
+        extra["system_instruction"] = system_instruction
+    if max_output_tokens is not None:
+        extra["max_output_tokens"] = max_output_tokens
 
     config = types.GenerateContentConfig(
         temperature=temperature,
         response_mime_type="application/json",
         response_schema=response_model,
+        **extra,
     )
 
     def _call() -> T:
@@ -538,6 +594,7 @@ def _generate(
         # Recorded before the call, not after: a request that fails on the server side has
         # still consumed budget, and under-counting is the expensive direction of error.
         _quota_ledger.record_request(model)
+        started = time.perf_counter()
         try:
             response = client.models.generate_content(model=model, contents=contents, config=config)
         except Exception as exc:
@@ -547,12 +604,22 @@ def _generate(
             # every call silently consumed 13 slots of recorded budget in the first run.
             if _status_code(exc) in (400, 403, 404, 500, 502, 503, 504):
                 _quota_ledger.refund_request(model)
+            _emit_attempt(model, started, _outcome_for(exc), error=exc)
             raise
+        usage = getattr(response, "usage_metadata", None)
         text = (response.text or "").strip()
         if not text:
             # A blocked or empty completion is a failure, not an empty verdict.
-            raise LLMUnavailableError(f"{description} returned an empty response body")
-        return response_model.model_validate_json(text)
+            error = LLMUnavailableError(f"{description} returned an empty response body")
+            _emit_attempt(model, started, telemetry.INVALID_RESPONSE, usage, error)
+            raise error
+        try:
+            parsed = response_model.model_validate_json(text)
+        except ValidationError as exc:
+            _emit_attempt(model, started, telemetry.INVALID_RESPONSE, usage, exc)
+            raise
+        _emit_attempt(model, started, telemetry.OK, usage)
+        return parsed
 
     _call._aurelix_model = model  # type: ignore[attr-defined]  # for quota attribution
     result = _execute_with_retry(_call, description=description)
@@ -570,12 +637,18 @@ def call_gemini_text(
     model: str = DEFAULT_MODEL,
     temperature: float = 0.1,
     cache_key: Optional[str] = None,
+    system_instruction: Optional[str] = None,
+    max_output_tokens: Optional[int] = None,
 ) -> T:
     """
     Text-only structured call.
 
     Raises `LLMUnavailableError` on failure. It does not return a placeholder, and callers
     must not convert this into a verdict — see `DecisionOutput.from_failure`.
+
+    `system_instruction` goes in Gemini's separate system slot rather than being pasted
+    above the user text, so operator instructions and untrusted input stay in different
+    channels. Used by the text gateway (`agent_core/llm/adapters/gemini.py`).
     """
     return _generate(
         contents=prompt,
@@ -583,8 +656,10 @@ def call_gemini_text(
         model=model,
         temperature=temperature,
         cache_key=cache_key,
-        est_tokens=estimate_tokens(prompt),
+        est_tokens=estimate_tokens((system_instruction or "") + prompt),
         description=f"{response_model.__name__} (text)",
+        system_instruction=system_instruction,
+        max_output_tokens=max_output_tokens,
     )
 
 
@@ -652,6 +727,7 @@ def call_gemini_multimodal(
         cached = _cache_get(cache_key)
         if cached:
             logger.info("[Cache] hit for %s", description)
+            _emit_cache_hit(chain[0])
             return response_model.model_validate_json(cached)
 
     last_error: Optional[BaseException] = None
