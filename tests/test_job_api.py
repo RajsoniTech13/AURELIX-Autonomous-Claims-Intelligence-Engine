@@ -11,6 +11,8 @@ no network.
 """
 from __future__ import annotations
 
+from tests.auth_helpers import auth_headers
+
 import io
 import json
 import time
@@ -60,7 +62,7 @@ def client(tmp_path, monkeypatch):
     app.dependency_overrides[session_module.get_db] = override_db
     monkeypatch.setattr(v1.job_service, "SessionLocal", Testing)
 
-    with TestClient(app) as c:
+    with TestClient(app, headers=auth_headers("reviewer")) as c:
         yield c
     app.dependency_overrides.clear()
     job_service.shutdown(wait=True)

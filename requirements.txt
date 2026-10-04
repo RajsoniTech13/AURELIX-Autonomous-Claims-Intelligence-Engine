@@ -43,3 +43,9 @@ openai==2.43.0
 # 287 MB for the whole API with the model loaded (evaluation/rag/report.md).
 fastembed==0.8.1
 onnxruntime==1.30.0
+
+# ── Authentication (Phase 7) ────────────────────────────────────────────────
+# JWT access tokens (HS256) and Argon2id password hashing at the OWASP minimum
+# (19 MiB, t=2, p=1). Pure-Python / abi3 wheels for linux x86_64 CPython 3.13.
+pyjwt==2.15.1
+argon2-cffi==25.1.0

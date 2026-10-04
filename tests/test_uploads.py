@@ -13,6 +13,9 @@ the client. All three are cheap to exploit and cheap to close.
 """
 from __future__ import annotations
 
+from tests.auth_helpers import auth_headers
+from platform_backend.security import sign_asset
+
 import io
 
 import pytest
@@ -68,7 +71,7 @@ def client(tmp_path, monkeypatch):
     app.dependency_overrides[session_module.get_db] = _override
     monkeypatch.setattr(v1.job_service, "SessionLocal", Testing)
 
-    with TestClient(app) as c:
+    with TestClient(app, headers=auth_headers("reviewer")) as c:
         yield c
     app.dependency_overrides.clear()
     job_service.shutdown(wait=True)
@@ -100,7 +103,7 @@ def test_the_stored_path_resolves_to_the_bytes_that_were_uploaded(client):
     assert len(paths) == 1
     assert paths[0].startswith("uploads/")
 
-    fetched = client.get(f"/{paths[0]}")
+    fetched = client.get("/" + sign_asset(paths[0]))
     assert fetched.status_code == 200
     assert fetched.content == raw
 
@@ -132,7 +135,7 @@ def test_several_images_are_all_persisted_in_order(client):
     assert len(paths) == 3
     assert len(set(paths)) == 3, "each upload must get its own name"
     for p in paths:
-        assert client.get(f"/{p}").status_code == 200
+        assert client.get("/" + sign_asset(p)).status_code == 200
 
 
 def test_a_claim_with_no_files_records_none_rather_than_an_empty_path(client):
@@ -187,7 +190,7 @@ def test_the_declared_content_type_is_not_trusted(client):
 
     stored = res.json()["image_paths"]
     assert stored.endswith(".png"), f"stored under the client's claim instead: {stored}"
-    assert client.get(f"/{stored}").headers["content-type"] == "image/png"
+    assert client.get("/" + sign_asset(stored)).headers["content-type"] == "image/png"
 
 
 # ─── The async contract shares the same edge ────────────────────────────────
@@ -227,4 +230,4 @@ def test_the_v1_route_persists_evidence_too(client):
         db.close()
 
     assert stored.startswith("uploads/")
-    assert client.get(f"/{stored}").status_code == 200
+    assert client.get("/" + sign_asset(stored)).status_code == 200

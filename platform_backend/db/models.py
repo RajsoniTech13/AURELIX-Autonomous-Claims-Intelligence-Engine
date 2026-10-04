@@ -150,3 +150,48 @@ class LLMCall(Base):
 
     request_id = Column(String(64), nullable=True, index=True)
     claim_id = Column(Integer, ForeignKey("claims.id"), nullable=True, index=True)
+
+
+class User(Base):
+    """
+    An account. Three roles: `claimant` (submits claims, sees only their own), `reviewer`
+    (sees every claim, decides escalated ones, uses the copilot), `admin` (everything).
+
+    `password_hash` is Argon2id and is NULL for demo accounts, which cannot log in with a
+    password at all — they exist only for the session the demo login created. No account,
+    and no password, is ever committed to the repository: real accounts are seeded from the
+    environment (`AURELIX_SEED_USERS`).
+
+    `username` is what `claims.user_id` holds for a claim a claimant submitted, so ownership
+    is a string comparison against a column that already existed — no migration of `claims`.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=True)
+    role = Column(String(20), nullable=False)
+    is_demo = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=get_utc_now)
+
+
+class RefreshToken(Base):
+    """
+    One refresh token, stored only as a SHA-256 hash.
+
+    Rotation: every refresh revokes the token used and issues a new one in the same
+    `family_id`. **Reuse detection:** presenting a token that was already rotated means two
+    parties hold it — the user and a thief — so the whole family is revoked and both must
+    log in again. That is the standard defence for tokens that live in browser storage.
+    """
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    family_id = Column(String(36), nullable=False, index=True)
+    created_at = Column(DateTime, default=get_utc_now)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    replaced_by_id = Column(Integer, ForeignKey("refresh_tokens.id"), nullable=True)

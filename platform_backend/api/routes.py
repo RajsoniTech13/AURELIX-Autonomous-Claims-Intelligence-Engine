@@ -1,7 +1,10 @@
 """
-AURELIX v2 — FastAPI API Routes.
+AURELIX — the unversioned API routes the dashboard uses.
 
-Maps the 7-agent graph state to database records and API responses.
+Every route that touches a claim declares who may call it (see `platform_backend/security.py`
+for the full access table): claimants submit and read their own claims; reviewers and admins
+read everything, work the review queue and see analytics. Only `/`, `/demo/status`,
+`/health` and `/ready` are public.
 """
 import os
 import csv
@@ -11,7 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, R
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from platform_backend.security import (
+    current_principal, ensure_can_read, require_admin, require_reviewer, signed_assets, submitter_id,
+)
 from platform_backend.services import demo_guard
+from platform_backend.services.auth import Principal
+from platform_backend.services.rate_limit import enforce
 
 from platform_backend.config import settings
 from platform_backend.db.session import get_db
@@ -89,6 +97,29 @@ def demo_status(request: Request):
     """
     return demo_guard.status(_visitor(request))
 
+def _asset_paths(claim: Claim) -> List[str]:
+    """Photographs from the claim row; documents from the document_check audit record."""
+    paths = [p for p in (claim.image_paths or "").split(";") if p and p != "none"]
+    for log in claim.audit_logs:
+        if log.agent_name == "document_check":
+            paths.extend((log.inputs or {}).get("document_paths") or [])
+    return paths
+
+
+def claim_detail(claim: Claim) -> Dict[str, Any]:
+    """The claim as the case file needs it, with signed URLs for its evidence."""
+    body = ClaimDetailSchema.model_validate(claim).model_dump(mode="json")
+    body["asset_urls"] = signed_assets(_asset_paths(claim))
+    return body
+
+
+def _submission_checks(request: Request, principal: Principal) -> str:
+    """Rate limit and demo capacity, checked before any upload is read or stored."""
+    enforce(f"submit:{principal.user_id}", "claim_submissions_per_hour", 3600, "claim submissions")
+    _require_capacity(request)
+    return _visitor(request)
+
+
 @router.get("/claims", response_model=List[ClaimSchema])
 def list_claims(
     status: Optional[str] = None,
@@ -96,29 +127,42 @@ def list_claims(
     escalated: Optional[bool] = None,
     limit: int = 100,
     offset: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(current_principal),
 ):
     query = db.query(Claim)
+    if not principal.is_reviewer:
+        query = query.filter(Claim.user_id == principal.username)
     if status:
         query = query.filter(Claim.claim_status == status)
     if claim_object:
         query = query.filter(Claim.claim_object == claim_object)
     if escalated is not None:
         query = query.filter(Claim.manual_review_required == escalated)
-    return query.order_by(Claim.created_at.desc()).offset(offset).limit(limit).all()
+    limit = max(1, min(limit, 200))
+    return query.order_by(Claim.created_at.desc()).offset(max(0, offset)).limit(limit).all()
 
-@router.get("/claims/{claim_id}", response_model=ClaimDetailSchema)
-def get_claim(claim_id: int, db: Session = Depends(get_db)):
+
+@router.get("/claims/{claim_id}")
+def get_claim(claim_id: int, db: Session = Depends(get_db),
+              principal: Principal = Depends(current_principal)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return claim
+    ensure_can_read(principal, claim.user_id)
+    return claim_detail(claim)
 
 
 from platform_backend.services.claim_service import execute_claim_sync, generate_claim_stream
 
 @router.post("/claims/submit", response_model=ClaimDetailSchema)
-def submit_claim(claim_in: ClaimCreate, db: Session = Depends(get_db)):
+def submit_claim(claim_in: ClaimCreate, db: Session = Depends(get_db),
+                 principal: Principal = Depends(require_admin)):
+    """
+    Legacy JSON submission with server-side `image_paths`. **Admin only:** the paths are
+    resolved on the server's own disk, so letting any caller name them would let a caller
+    probe which image files exist on the host. The dashboard never uses this route.
+    """
     cached = get_cached_result(claim_in.user_id, claim_in.image_paths)
     if cached:
         db_claim = db.query(Claim).filter(
@@ -153,26 +197,31 @@ def submit_claim(claim_in: ClaimCreate, db: Session = Depends(get_db)):
     return db_claim
 
 
-@router.post("/claims/submit-multimodal", response_model=ClaimDetailSchema)
+@router.post("/claims/submit-multimodal")
 async def submit_claim_multimodal(
     request: Request,
-    user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
+    user_id: Optional[str] = Form(None),
     files: List[UploadFile] = File([]),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(current_principal),
 ):
-    _require_capacity(request)
+    visitor = _submission_checks(request, principal)
     pil_images, image_paths_str = await read_uploads(files)
+    # Counted only once the uploads are accepted: a rejected file must not use up one of
+    # the visitor's analyses. (This route used to check the cap and never count at all.)
+    demo_guard.consume(visitor)
+    owner = submitter_id(principal, user_id)
 
     load_lookups_if_empty()
-    u_history = user_history_lookup.get(user_id)
+    u_history = user_history_lookup.get(owner)
     e_rules = evidence_rules_lookup.get(claim_object.lower())
 
     try:
         db_claim = execute_claim_sync(
             db=db,
-            user_id=user_id,
+            user_id=owner,
             image_paths=image_paths_str,
             user_claim=user_claim,
             claim_object=claim_object,
@@ -183,38 +232,42 @@ async def submit_claim_multimodal(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent orchestrator failed: {str(e)}")
 
-    return db_claim
+    return claim_detail(db_claim)
 
 
 @router.post("/claims/submit-multimodal-stream")
 async def submit_claim_multimodal_stream(
     request: Request,
-    user_id: str = Form(...),
     user_claim: str = Form(...),
     claim_object: str = Form(...),
+    user_id: Optional[str] = Form(None),
     files: List[UploadFile] = File([]),
     documents: List[UploadFile] = File([]),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(current_principal),
 ):
     from fastapi.responses import StreamingResponse
 
     # Before the uploads are read, so a refused request costs no disk and no decode.
-    _require_capacity(request)
-    demo_guard.consume(_visitor(request))
+    visitor = _submission_checks(request, principal)
 
     pil_images, image_paths_str = await read_uploads(files)
     # Additive and optional: an existing client that posts no `documents` field
     # behaves exactly as before.
     doc_parts, document_paths_str = await read_documents(documents)
+    # Counted after the uploads are accepted. It used to be counted first, so a rejected
+    # upload still used up one of a visitor's analyses.
+    demo_guard.consume(visitor)
+    owner = submitter_id(principal, user_id)
 
     load_lookups_if_empty()
-    u_history = user_history_lookup.get(user_id)
+    u_history = user_history_lookup.get(owner)
     e_rules = evidence_rules_lookup.get(claim_object.lower())
 
     return StreamingResponse(
         generate_claim_stream(
             db=db,
-            user_id=user_id,
+            user_id=owner,
             image_paths=image_paths_str,
             user_claim=user_claim,
             claim_object=claim_object,
@@ -230,7 +283,8 @@ async def submit_claim_multimodal_stream(
 
 
 @router.get("/queue", response_model=List[ClaimSchema])
-def list_manual_review_queue(db: Session = Depends(get_db)):
+def list_manual_review_queue(db: Session = Depends(get_db),
+                             principal: Principal = Depends(require_reviewer)):
     return db.query(Claim).filter(
         Claim.manual_review_required == True,
         Claim.manual_verdict == None
@@ -238,7 +292,8 @@ def list_manual_review_queue(db: Session = Depends(get_db)):
 
 
 @router.post("/queue/{claim_id}/verdict", response_model=ClaimSchema)
-def submit_manual_verdict(claim_id: int, verdict_in: ManualVerdictUpdate, db: Session = Depends(get_db)):
+def submit_manual_verdict(claim_id: int, verdict_in: ManualVerdictUpdate, db: Session = Depends(get_db),
+                          principal: Principal = Depends(require_reviewer)):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -254,9 +309,11 @@ def submit_manual_verdict(claim_id: int, verdict_in: ManualVerdictUpdate, db: Se
     db_log = AuditLog(
         claim_id=claim.id,
         agent_name="Human Review (Manual Action)",
-        inputs={"verdict": verdict_in.verdict, "notes": verdict_in.notes},
+        # Who decided is part of the decision: the audit trail names the reviewer account.
+        inputs={"verdict": verdict_in.verdict, "notes": verdict_in.notes,
+                "reviewer": principal.username},
         outputs={"final_status": claim.claim_status},
-        reasoning=f"Human reviewer set verdict to {verdict_in.verdict.upper()}. Notes: {verdict_in.notes}",
+        reasoning=f"Reviewer {principal.username} set verdict to {verdict_in.verdict.upper()}. Notes: {verdict_in.notes}",
     )
     db.add(db_log)
     db.commit()
@@ -265,7 +322,7 @@ def submit_manual_verdict(claim_id: int, verdict_in: ManualVerdictUpdate, db: Se
 
 
 @router.get("/analytics", response_model=AnalyticsDashboardData)
-def get_analytics(db: Session = Depends(get_db)):
+def get_analytics(db: Session = Depends(get_db), principal: Principal = Depends(require_reviewer)):
     total = db.query(Claim).count()
     if total == 0:
         return AnalyticsDashboardData(

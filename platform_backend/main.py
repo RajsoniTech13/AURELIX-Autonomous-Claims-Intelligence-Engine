@@ -1,7 +1,9 @@
 import os
 import sys
 
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -10,8 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from platform_backend.config import settings
 from platform_backend.db.session import init_db
+from platform_backend.api.auth import router as auth_router
 from platform_backend.api.routes import router
 from platform_backend.api.v1 import router as v1_router
+from platform_backend.security import verify_asset
 from platform_backend.services.uploads import UPLOAD_URL_PREFIX, upload_dir
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
@@ -42,6 +46,35 @@ app.add_middleware(
     expose_headers=["Location"],
 )
 
+# Security headers on every response.
+#
+# The API returns JSON and images, never HTML a browser should render, so the policy is as
+# tight as it can be: nothing may be loaded (`default-src 'none'`), nothing may frame it,
+# content types are never guessed, and no referrer leaks a signed image URL to another site.
+# HSTS is harmless over plain HTTP locally (browsers ignore it there) and pins HTTPS in
+# production.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    if request.url.path.startswith(("/docs", "/redoc")):
+        # The interactive API docs are an HTML page that loads its own scripts.
+        del response.headers["Content-Security-Policy"]
+    return response
+
+
 # Claim photographs, served back to the review screen.
 #
 # `image_paths` stores `uploads/<uuid>.jpg`, so this route is what makes those rows
@@ -53,8 +86,14 @@ app.add_middleware(
 # relocates storage afterwards — a test fixture, a container that mounts its disk late —
 # leaves the mount serving a path that no longer holds the files, and the symptom is a 404
 # for evidence that exists. Resolving per request costs a `stat` and cannot drift.
+#
+# Served only with a valid signature. The claim response carries URLs signed with an expiry
+# (`platform_backend/security.py`), minted only after the caller was allowed to read that
+# claim — an `<img>` tag cannot send an Authorization header, so the URL carries the proof.
 @app.get(f"/{UPLOAD_URL_PREFIX}/{{name}}", tags=["uploads"])
-def get_upload(name: str):
+def get_upload(name: str, exp: Optional[str] = None, sig: Optional[str] = None):
+    if not verify_asset(name, exp, sig):
+        raise HTTPException(status_code=403, detail="This link is invalid or has expired.")
     root = upload_dir().resolve()
     # The stored names are generated hex, so a legitimate request never contains a
     # separator. Rejecting them outright is a stronger check than normalising and hoping.
@@ -65,8 +104,9 @@ def get_upload(name: str):
     if root not in target.parents or not target.is_file():
         raise HTTPException(status_code=404, detail="Not found")
 
-    # Immutable content under a random name: cache hard, revalidate never.
-    return FileResponse(target, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    # Private, and no longer than the link is valid: a shared cache must never hand one
+    # claimant's photograph to another.
+    return FileResponse(target, headers={"Cache-Control": "private, max-age=600"})
 
 
 @app.get("/health", tags=["ops"])
@@ -113,11 +153,25 @@ def ready():
 @app.on_event("startup")
 def on_startup():
     init_db()
+    from platform_backend.db.session import SessionLocal
 
     # Persist one row per model call. Subscribed here, not at import, so importing the app
     # in a script or a test does not start writing telemetry by accident.
     from platform_backend.services import llm_telemetry
     llm_telemetry.install()
+
+    # Accounts from AURELIX_SEED_USERS. Never a default password: with the variable unset,
+    # only the demo sign-in exists.
+    from platform_backend.services.auth import seed_users
+    seed_db = SessionLocal()
+    try:
+        seeded = seed_users(seed_db)
+        if seeded:
+            print(f"[Auth] {seeded} account(s) seeded from AURELIX_SEED_USERS")
+    except ValueError as exc:
+        print(f"[Auth] AURELIX_SEED_USERS ignored: {exc}")
+    finally:
+        seed_db.close()
 
     # The retrieval index is built offline by `python -m agent_core.tools.build_index` and
     # only loaded here. The previous startup hook re-indexed a CSV into a TF-IDF store on
@@ -166,5 +220,6 @@ def on_shutdown():
     llm_telemetry.uninstall()
 
 
+app.include_router(auth_router)
 app.include_router(v1_router)
 app.include_router(router)
