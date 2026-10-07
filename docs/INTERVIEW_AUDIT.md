@@ -1,36 +1,56 @@
 # AURELIX — Interview Audit
 
-Every statement here is verified against the repository on 2026-08-10. Where a resume claim
-cannot be proven from the code, it is marked **UNSAFE TO CLAIM** with the exact wording that
+**Updated 2026-10-04 for Phase 7.** The verdict table below is current; it was re-verified
+with `pytest` (546 passed, 1 skipped), `python -m agent_core.evaluation.evaluate_synthetic`,
+`python -m agent_core.evaluation.evaluate_rag`, `python -m agent_core.evaluation.evaluate_copilot --live`
+and GitHub Actions run 37202181086. Parts 1–10 are the original 2026-08-10 audit; where Phase 7
+changed a fact, **"What Phase 7 changed"** below says which statement is superseded. Where a
+claim cannot be proven from the code, it is marked **UNSAFE TO CLAIM** with the wording that
 *is* safe.
-
-Verification commands used: `pytest` (254 passed), `python -m agent_core.evaluation.evaluate_synthetic`,
-direct reads of `agent_core/`, `platform_backend/`, `config/`, `tests/`, `agent_core/output/`.
 
 ---
 
 # PART 0 — Verdict table
 
-| Resume claim | Status | Note |
+| Resume claim | Status | Safe wording |
 |---|---|---|
-| 7-stage pipeline | ✅ SAFE, with caveat | Stage 6 (`alignment`) emits events but does no work — see §1.3 |
-| Structured outputs | ✅ SAFE | `response_schema` + Pydantic `Literal` enums |
-| Deterministic guardrails | ✅ SAFE | Strongest claim you have |
-| 93.2% macro-F1 | ✅ SAFE | Recomputed: 93.17% → 93.2%. Must say "44 synthetic cases" |
-| 254 tests | ✅ SAFE | 222 functions → 254 parametrised cases |
-| Batching 3/request | ✅ SAFE | `max_claims_per_request: 3` |
-| **176 → 15 calls** | ⚠️ **PARTLY UNSAFE** | Design arithmetic, **not a measured A/B**. See §2.1 |
-| Model fallback ladder | ✅ SAFE | 3 rungs, ledger-aware skip |
-| Quota + rate governance | ✅ SAFE | Sliding window RPM/TPM/RPD, record-then-refund |
-| Circuit breaker | ✅ SAFE | Implemented + 2 tests |
-| Caching | ⚠️ WEAK | Implemented; **LLM cache has no direct test** |
-| **BM25 + LSA + RRF** | ⚠️ **UNSAFE as stated** | Built + 31 tests, **never called during a claim**. See §3.1 |
-| 15-rule decision engine | ✅ SAFE | Exactly 15 rules, verified |
-| pHash | ✅ SAFE | pHash + dHash + SHA-256, live, tested |
-| **Prompt-injection resistance** | ⚠️ **PARTLY UNSAFE** | Regex detector is **dead code**. See §3.3 |
-| SSE | ✅ SAFE | Live, with keepalive |
-| Async APIs | ✅ SAFE, with caveat | Implemented + tested; **UI does not use it** |
-| Multi-agent | ⚠️ WORD CAREFULLY | No autonomy, no tool-calling, no agent loop |
+| 8-stage pipeline, 1 model call | ✅ SAFE | "An 8-stage pipeline where only perception calls a model — one multimodal request per claim; the other seven stages are deterministic." |
+| LLM observes, rules decide | ✅ SAFE | "The LLM only reports observations; 17 ordered deterministic rules decide, and every verdict names the rule that fired." |
+| Structured outputs | ✅ SAFE | "Provider-native constrained JSON (Gemini `response_schema`, Groq strict `json_schema`, Claude `output_config`) plus Pydantic validation after." |
+| 95.5% accuracy / 95.0% macro-F1 | ✅ SAFE | "95.5% accuracy, 95.0% macro-F1 on a 44-case **synthetic** benchmark, 95% bootstrap CI 88.6–100% / 86.0–100%." Never drop "synthetic". |
+| 546 tests | ✅ SAFE | "546 hermetic tests — no network, no API keys — run in GitHub Actions on every push." |
+| CI with eval gates | ✅ SAFE | "CI fails the build if benchmark macro-F1 drops below 0.93 or copilot retrieval recall@5 below 0.90, plus a dependency CVE audit." |
+| **RAG** | ✅ SAFE **as worded** | "A RAG policy copilot for reviewers: hybrid BM25 + local embedding retrieval with RRF over the policy, a zero-call not-found gate, and citation validation." ⚠️ UNSAFE: "RAG decides claims" / "retrieval-augmented claim decisions" — retrieval is **not** in the verdict path. |
+| Embeddings / vector store | ✅ SAFE | "Local bge-small ONNX embeddings behind a vector-store interface: NumPy in production, pgvector (HNSW, cosine) when on Postgres." ⚠️ Do not say pgvector runs in production — it is implemented and unit-tested only when Postgres is present (skipped in CI). |
+| Retrieval quality | ✅ SAFE | "recall@5 0.961 and nDCG@5 0.889 on a 40-question golden set, up from 0.818 / 0.687 with LSA; I measured a reranker and rejected it." |
+| Copilot live eval | ✅ SAFE, with caveat | "32/32 answerable questions answered with a correct citation and 8/8 unanswerable refused, live on Groq." Add: the golden set and policy share an author. |
+| LLM gateway, multi-provider | ✅ SAFE, with caveat | "A provider-agnostic gateway with Groq, Gemini, OpenAI and Claude adapters and one error taxonomy." Groq verified live; Claude and OpenAI adapters are tested against fixtures and SDK types only — say so if asked. |
+| Cost tracking | ✅ SAFE, with caveat | "Every model call is recorded with tokens, latency and list-price cost; the dashboard shows p50/p95 and cost per claim." ⚠️ UNSAFE: quoting a per-claim cost figure — it has not been measured from real traffic yet. Billed cost is $0 (free tiers). |
+| Caching | ✅ SAFE | "Content-addressed caching, tested to make zero model calls on a hit." (was untested; now `test_a_cached_perception_makes_zero_model_calls`) |
+| Authentication / RBAC | ✅ SAFE | "JWT access tokens with rotating, reuse-detected refresh tokens, Argon2id passwords, claimant/reviewer/admin roles enforced per route, signed expiring evidence URLs." |
+| OWASP LLM Top 10 | ✅ SAFE | "I mapped the system to the OWASP Top 10 for LLM Applications 2025, with the test that proves each control." |
+| Prompt-injection resistance | ✅ SAFE | "Untrusted text is fenced as data; the model reports instruction-like text as a field; a deterministic regex also routes such claims to a human; and the copilot's citation validator holds even if the model obeys an injection." (regex is now live) |
+| Human in the loop | ✅ SAFE | "Low-confidence, contradicted, not-enough-information, fraud-flagged and injection-flagged claims go to a reviewer queue; the reviewer's decision is recorded with their account." |
+| **176 → 15 calls** | ⚠️ **PARTLY UNSAFE** | "176 → 15 requests **by construction**" — design arithmetic, not a measured A/B. See §2.1. |
+| Model fallback ladder | ✅ SAFE | 3 Gemini rungs for perception; Groq → Gemini-lite for text tasks. |
+| Quota + rate governance | ✅ SAFE | Sliding-window RPM/TPM/RPD, record-then-refund ledger; per-account API rate limits. |
+| Circuit breaker | ✅ SAFE | Implemented and tested. |
+| pHash duplicate detection | ✅ SAFE | pHash + dHash + SHA-256, live, tested. |
+| SSE + async jobs | ✅ SAFE, with caveat | Implemented and tested; the UI uses the streaming route, not the async v1 route. Idempotency is now race-safe (unique index, 8-thread test). |
+| Multi-agent | ⚠️ WORD CAREFULLY | "A multi-stage pipeline of bounded components, one of which is an LLM." No autonomy, no tool calling, no agent loop. |
+
+## What Phase 7 changed — superseded statements in Parts 1–10
+
+| Original statement | Now |
+|---|---|
+| 7 stages; 15 rules (§1.1, §3.2) | 8 stages (`document_check` added) and 17 rules (R043, R044 for documents) |
+| 254 tests; 93.2% (§1.6, §1.7) | 546 tests; 95.5% accuracy / 95.0% macro-F1 with bootstrap intervals |
+| "LLM cache has no direct test" (§2.8) | Tested: a cache hit makes zero model calls. The perception cache key was also fixed — it used Python's per-process-salted `hash()` |
+| "BM25+LSA+RRF never called; not RAG; no vector database" (§3.1, Q33, Q34) | The **Policy Copilot is RAG** (reviewer-facing). Retrieval is still **not** in the claim verdict path — that part of the original argument stands |
+| "Regex detector is dead code" (§3.3, Q31b) | Live in `service.judge`: adds the `text_instruction_present` flag (routes to a human); never changes a verdict — 44 replays, 0 changes |
+| "No authentication" (§6, Part 10 #1, Q38) | JWT + refresh rotation + roles + signed URLs; see `docs/SECURITY.md` |
+| "Idempotency is not unique; reap_orphans fails queued jobs" (§3.6) | Unique `(user_id, idempotency_key)`; startup fails only running jobs and restarts queued ones; a job runs at most once |
+| Resume line "Production-grade" (Part 9) | Still drop it. Say "free-tier-deployed, with auth, CI gates and cost telemetry" |
 
 ---
 

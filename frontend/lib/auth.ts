@@ -70,11 +70,17 @@ export function onSessionChange(fn: (user: SessionUser | null) => void): () => v
 }
 
 async function post(path: string, body: unknown): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  try {
+    return await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // fetch rejects only when no response could be read at all (offline, the free instance
+    // restarting, a blocked cross-origin reply); the browser's own text is "Failed to fetch".
+    throw new Error("Could not reach the analysis service. It may be restarting — try again in a minute.");
+  }
 }
 
 async function detail(res: Response, fallback: string): Promise<string> {

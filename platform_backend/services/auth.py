@@ -101,6 +101,15 @@ def jwt_secret() -> str:
     return _generated_secret
 
 
+def signing_key_status() -> str:
+    """For `/ready` and the startup log: `configured`, `generated` (sessions end on restart)
+    or `too_short` (every sign-in fails until the variable is fixed)."""
+    configured = os.getenv("AURELIX_JWT_SECRET", "")
+    if not configured:
+        return "generated"
+    return "configured" if len(configured) >= 32 else "too_short"
+
+
 # ─── Passwords ──────────────────────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
