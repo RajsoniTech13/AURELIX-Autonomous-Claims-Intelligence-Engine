@@ -342,6 +342,30 @@ def test_admin_is_not_a_demo_role(api):
     assert api.post("/api/v1/auth/demo", json={"role": "admin"}).status_code == 422
 
 
+def test_a_too_short_signing_key_is_reported_and_its_500_reaches_the_browser(api, monkeypatch):
+    # Production regression: a short AURELIX_JWT_SECRET made every sign-in crash while
+    # /ready said "ok", and the bare 500 had no CORS header, so the page saw "Failed to fetch".
+    monkeypatch.setenv("AURELIX_JWT_SECRET", "shorter-than-32-characters")
+    ready = api.get("/ready").json()
+    assert ready["ready"] is False and ready["checks"]["signing_key"] == "too_short"
+
+    response = api.post("/api/v1/auth/demo", json={"role": "claimant"},
+                        headers={"Origin": "https://www.aurelix.space"})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "The server hit an unexpected error."}
+    assert "access-control-allow-origin" in response.headers
+    assert "shorter-than" not in response.text
+
+
+def test_ready_reports_the_signing_key_state_without_revealing_it(api, monkeypatch):
+    monkeypatch.delenv("AURELIX_JWT_SECRET", raising=False)
+    assert api.get("/ready").json()["checks"]["signing_key"] == "generated"
+    monkeypatch.setenv("AURELIX_JWT_SECRET", "k" * 40)
+    body = api.get("/ready").json()
+    assert body["checks"]["signing_key"] == "configured" and body["ready"] is True
+    assert "k" * 40 not in str(body)
+
+
 def test_demo_sign_in_can_be_switched_off(api, monkeypatch):
     monkeypatch.setenv("AURELIX_DEMO_LOGIN", "0")
     assert api.post("/api/v1/auth/demo", json={"role": "claimant"}).status_code == 404

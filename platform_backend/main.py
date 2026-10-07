@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -5,7 +6,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 # Ensure project root is in path so we can import platform_backend and agent_core
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -19,6 +20,24 @@ from platform_backend.security import verify_asset
 from platform_backend.services.uploads import UPLOAD_URL_PREFIX, upload_dir
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
+logger = logging.getLogger(__name__)
+
+
+# Unhandled errors become a JSON 500 *inside* the CORS layer.
+#
+# Starlette turns an uncaught exception into a plain-text 500 in its outermost middleware,
+# outside CORS, so that response carries no `Access-Control-Allow-Origin`. A browser then
+# refuses to show the page the response and reports only "Failed to fetch" — a
+# server bug disguised as a network outage. Registered before CORSMiddleware, this sits
+# inside it, so the 500 reaches the page with its CORS headers and a real status.
+@app.middleware("http")
+async def json_server_errors(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:  # noqa: BLE001 — the last line of defence; the traceback is logged
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "The server hit an unexpected error."})
+
 
 # CORS.
 #
@@ -146,7 +165,12 @@ def ready():
     checks["retrieval_index"] = (
         "loaded" if index is not None and getattr(index, "meta", None) else "empty"
     )
-    ready_ = checks["database"] == "ok"
+    # A too-short AURELIX_JWT_SECRET is refused when a token is signed, so every sign-in
+    # fails while everything else looks healthy. It makes the service unready: no one can
+    # get in to submit a claim. Never the key itself, only its state.
+    from platform_backend.services.auth import signing_key_status
+    checks["signing_key"] = signing_key_status()
+    ready_ = checks["database"] == "ok" and checks["signing_key"] != "too_short"
     return {"ready": ready_, "checks": checks}
 
 
@@ -207,6 +231,10 @@ def on_startup():
         print(f"[Retrieval] index NOT loaded: {e}")
 
     print(f"[CORS] origins={settings.cors_origins} credentials={not _allow_any}")
+    from platform_backend.services.auth import signing_key_status
+    if signing_key_status() == "too_short":
+        print("[ERROR] AURELIX_JWT_SECRET is shorter than 32 characters — every sign-in will "
+              "fail. Set it to e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`.")
     if not settings.GEMINI_API_KEY:
         print("[WARN] GEMINI_API_KEY is not set — perception will fail and every claim "
               "will return not_enough_information.")
